@@ -37,7 +37,7 @@ def crear():
     costo = numero(d["costo_unitario"], "costo_unitario")
     with engine.begin() as con:
         nombre, unidad = d["nombre_insumo"].strip(), d["unidad_medida"].strip()
-        if not nombre or not unidad:
+        if not nombre or not unidad or len(nombre) > 150 or len(unidad) > 30:
             raise ErrorApi(400, "El nombre y la unidad del insumo son obligatorios")
         ciudad = d.get("ciudad")
         if ciudad:
@@ -75,12 +75,17 @@ def crear():
 @bp.put("/<int:id>")
 def actualizar(id):
     d = pedir(CAMPOS)
+    if not all(isinstance(d.get(field), str) for field in ("nombre_insumo", "unidad_medida")):
+        raise ErrorApi(400, "El nombre y la unidad del insumo deben ser texto")
+    nombre, unidad = d["nombre_insumo"].strip(), d["unidad_medida"].strip()
+    if not nombre or not unidad or len(nombre) > 150 or len(unidad) > 30:
+        raise ErrorApi(400, "El nombre o la unidad del insumo no son válidos")
     costo = numero(d["costo_unitario"], "costo_unitario")
     with engine.begin() as con:
         obtener(con, "INSUMOS", "id_insumo", id)
         con.execute(text(
             "UPDATE INSUMOS SET nombre_insumo=:n, unidad_medida=:u, costo_unitario=:c WHERE id_insumo=:i"),
-            {"n": d["nombre_insumo"].strip(), "u": d["unidad_medida"].strip(), "c": costo, "i": id})
+            {"n": nombre, "u": unidad, "c": costo, "i": id})
         return jsonify(obtener(con, "INSUMOS", "id_insumo", id))
 
 

@@ -5,7 +5,7 @@ Implementa la arquitectura políglota de BIMetrics combinando:
 2. NoSQL Documental: Logs de telemetría, cómputos e importaciones en MongoDB (`actividades_bim`).
 """
 from collections import Counter
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from sqlalchemy import text
 
 from ..database import engine
@@ -21,6 +21,22 @@ from ..services.actividades_bim import (
 bp = Blueprint("actividades_bim", __name__, url_prefix="/api/actividades-bim")
 
 
+def _rol_usuario_actual():
+    id_usuario = session.get("id_usuario")
+    if not id_usuario:
+        raise ErrorApi(401, "Inicia sesión para continuar")
+    with engine.connect() as con:
+        return con.execute(text("SELECT rol FROM USUARIOS WHERE id_usuario = :id"), {"id": id_usuario}).scalar()
+
+
+def _exigir_propietario(actividad):
+    if not actividad:
+        raise ErrorApi(404, "No se encontró la actividad BIM")
+    if actividad.get("id_usuario") != session.get("id_usuario") and _rol_usuario_actual() != "administrador":
+        raise ErrorApi(404, "No se encontró la actividad BIM")
+    return actividad
+
+
 # ------------------------------------------------------------------------------
 # 1. ENDPOINT POLÍGLOTA HÍBRIDO (SQL + NoSQL)
 # ------------------------------------------------------------------------------
@@ -32,6 +48,9 @@ def obtener_resumen_hibrido_usuario(id_usuario: int):
     2. Consulta MongoDB (NoSQL) para obtener las últimas 10 actividades e importaciones BIM.
     3. Retorna un JSON unificado enriquecido con métricas agregadas.
     """
+    if id_usuario != session.get("id_usuario") and _rol_usuario_actual() != "administrador":
+        raise ErrorApi(404, "No existe usuario registrado con ese identificador")
+
     # Paso 1: Consultar datos estructurados del usuario en la base relacional (SQL)
     with engine.connect() as con:
         usuario_row = con.execute(
@@ -46,7 +65,11 @@ def obtener_resumen_hibrido_usuario(id_usuario: int):
 
     # Paso 2: Consultar logs documentales no estructurados en MongoDB (NoSQL)
     # Obtenemos las últimas 10 actividades de importación/auditoría ordenadas desc por fecha
-    limite = int(request.args.get("limite", 10))
+    try:
+        limite = int(request.args.get("limite", 10))
+    except (TypeError, ValueError):
+        raise ErrorApi(400, "El límite debe ser un número entero")
+    limite = max(1, min(100, limite))
     actividades_nosql = listar_actividades_bim(id_usuario=id_usuario, limite=limite)
 
     # Paso 3: Calcular métricas sintéticas sobre la marcha
@@ -77,11 +100,22 @@ def registrar_actividad():
     """Registra un nuevo log de importación o actividad BIM en MongoDB.
     Valida previamente la existencia del usuario en la base relacional (integridad políglota).
     """
-    datos = request.get_json(silent=True) or {}
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
     id_usuario = datos.get("id_usuario")
 
-    if not id_usuario:
+    if not id_usuario or isinstance(id_usuario, bool):
         raise ErrorApi(400, "El campo 'id_usuario' es obligatorio")
+
+    try:
+        id_usuario = int(id_usuario)
+    except (TypeError, ValueError):
+        raise ErrorApi(400, "El campo 'id_usuario' debe ser un entero")
+    datos["id_usuario"] = id_usuario
+
+    if id_usuario != session.get("id_usuario") and _rol_usuario_actual() != "administrador":
+        raise ErrorApi(403, "No puedes registrar actividad para otro usuario")
 
     # Validación de integridad referencial cruzada (Cross-database integrity check)
     with engine.connect() as con:
@@ -100,16 +134,17 @@ def registrar_actividad():
 @bp.get("/<string:id_actividad>")
 def ver_actividad(id_actividad: str):
     """Consulta una actividad específica por su ObjectId de MongoDB."""
-    actividad = obtener_actividad_bim(id_actividad)
-    if not actividad:
-        raise ErrorApi(404, f"No se encontró ninguna actividad con ID '{id_actividad}'")
+    actividad = _exigir_propietario(obtener_actividad_bim(id_actividad))
     return jsonify(actividad)
 
 
 @bp.put("/<string:id_actividad>")
 def editar_actividad(id_actividad: str):
     """Actualiza datos parciales de una actividad BIM existente."""
-    datos = request.get_json(silent=True) or {}
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
+    _exigir_propietario(obtener_actividad_bim(id_actividad))
     actividad_actualizada = actualizar_actividad_bim(id_actividad, datos)
     if not actividad_actualizada:
         raise ErrorApi(404, f"No se encontró ninguna actividad con ID '{id_actividad}' para actualizar")
@@ -119,6 +154,7 @@ def editar_actividad(id_actividad: str):
 @bp.delete("/<string:id_actividad>")
 def borrar_actividad(id_actividad: str):
     """Elimina un documento de actividad de MongoDB."""
+    _exigir_propietario(obtener_actividad_bim(id_actividad))
     eliminado = eliminar_actividad_bim(id_actividad)
     if not eliminado:
         raise ErrorApi(404, f"No se encontró la actividad con ID '{id_actividad}' para eliminar")

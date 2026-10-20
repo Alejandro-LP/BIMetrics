@@ -1,11 +1,12 @@
 """CU-02 y CU-04: cálculo paramétrico, duplicado y reutilización de presupuestos."""
 from datetime import date
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, send_file
 from sqlalchemy import text
 
 from ..database import engine
 from ..errors import ErrorApi
+from ..services.excel import exportar_presupuesto_excel
 from ..services.presupuestos import agregar_linea, presupuesto_completo, recalcular
 from ..utils import filas, obtener, pedir
 
@@ -58,16 +59,40 @@ def ver(id):
         _presupuesto_del_usuario(con, id)
         return jsonify(presupuesto_completo(con, id))
 
+@bp.get("/<int:id>/excel")
+def exportar_excel(id):
+    """Exporta el presupuesto completo y sus líneas a una hoja de cálculo Excel (.xlsx)."""
+    with engine.connect() as con:
+        _presupuesto_del_usuario(con, id)
+        presupuesto = presupuesto_completo(con, id)
+
+    stream = exportar_presupuesto_excel(presupuesto)
+    nombre_seguro = "".join(c for c in (presupuesto.get("nombre_obra") or "BIMetrics") if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+    filename = f"Presupuesto_{nombre_seguro}_{id}.xlsx"
+
+    return send_file(
+        stream,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
 
 @bp.post("")
 def crear():
     d = pedir(["id_proyecto"])  # opcional: "detalle": [{"id_insumo": 1, "cantidad": 2.5}, ...]
+    lineas = d.get("detalle", [])
+    if lineas is None:
+        lineas = []
+    if not isinstance(lineas, list) or any(not isinstance(linea, dict) for linea in lineas):
+        raise ErrorApi(400, "El detalle debe ser una lista de partidas")
     with engine.begin() as con:
         _proyecto_del_usuario(con, d["id_proyecto"])
         nuevo = _nuevo(con, d["id_proyecto"])
         ciudad = con.execute(text("SELECT ciudad FROM PROYECTOS WHERE id_proyecto=:p"),
                              {"p": d["id_proyecto"]}).scalar()
-        for linea in d.get("detalle") or []:
+        for linea in lineas:
             agregar_linea(con, nuevo, linea.get("id_insumo"), linea.get("cantidad"), ciudad)
         recalcular(con, nuevo)
         return jsonify(presupuesto_completo(con, nuevo)), 201
@@ -107,7 +132,11 @@ def calcular(id):
 
 @bp.post("/<int:id>/duplicar")
 def duplicar(id):
-    d = request.get_json(silent=True) or {}  # opcional: {"id_proyecto": otro}
+    d = request.get_json(silent=True)  # opcional: {"id_proyecto": otro}
+    if d is None:
+        d = {}
+    elif not isinstance(d, dict):
+        raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
     with engine.begin() as con:
         original = _presupuesto_del_usuario(con, id)
         destino = d.get("id_proyecto", original["id_proyecto"])

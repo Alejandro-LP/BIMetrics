@@ -9,7 +9,10 @@ load_dotenv(BASE_DIR / ".env")
 
 DATA_DIR = BASE_DIR / "data"
 DB_URL = os.getenv("DATABASE_URL", f"sqlite:///{(DATA_DIR / 'presupuestos.db').as_posix()}")
-CORS_ORIGIN = os.getenv("CORS_ORIGIN", "*")
+CORS_ORIGIN = os.getenv(
+    "CORS_ORIGIN",
+    "http://localhost:5173,http://127.0.0.1:5173",
+)
 SECRET_KEY = os.getenv("SECRET_KEY")
 ROLES = {"arquitecto", "ingeniero", "administrador", "cliente"}
 

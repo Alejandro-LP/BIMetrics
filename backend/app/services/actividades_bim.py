@@ -4,15 +4,18 @@ Colección objetivo: `actividades_bim`
 Persistencia: Base Documental NoSQL (PyMongo)
 """
 from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, List, Optional
 from bson import ObjectId
 from bson.errors import InvalidId
 from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
 
 from ..database import get_mongo_db
 from ..errors import ErrorApi
 
 COLECCION_ACTIVIDADES = "actividades_bim"
+logger = logging.getLogger(__name__)
 
 
 def _obtener_coleccion() -> Collection:
@@ -22,15 +25,12 @@ def _obtener_coleccion() -> Collection:
 
 
 def asegurar_indices_bim() -> None:
-    """Crea los índices necesarios para optimizar consultas por usuario, fecha y software."""
+    """Ensure the compound index used by the user's recent activity history."""
     try:
-        coleccion = _obtener_coleccion()
-        coleccion.create_index([("id_usuario", 1), ("fecha_registro", -1)], name="idx_usuario_fecha")
-        coleccion.create_index([("tipo_evento", 1)], name="idx_tipo_evento")
-        coleccion.create_index([("software_origen", 1)], name="idx_software_origen")
-    except Exception:
-        # Si MongoDB no está accesible en el inicio, no bloqueamos la inicialización general
-        pass
+        _obtener_coleccion().create_index([("id_usuario", 1), ("fecha_registro", -1)], name="idx_usuario_fecha")
+    except PyMongoError:
+        # SQL remains available; BIM requests will return a service-unavailable response.
+        logger.warning("MongoDB is unavailable; the BIM activity index could not be ensured.", exc_info=True)
 
 
 def serializar_documento_bim(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

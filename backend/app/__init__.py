@@ -1,55 +1,63 @@
 """Fábrica de la aplicación Flask."""
 import os
-from pathlib import Path
-
-from flask import Flask, jsonify, redirect, request, send_from_directory, session
+from flask import Flask, jsonify, request, session
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
-from .config import SECRET_KEY
+from .config import CORS_ORIGIN, SECRET_KEY
 from .database import engine
 from .errors import register_errors
 from .models import meta
-from .routes import actividades_bim, auth, insumos, presupuestos, proyectos, usuarios
+from .routes import actividades_bim, auth, dashboard, insumos, presupuestos, proyectos, usuarios
 from .services.actividades_bim import asegurar_indices_bim
 
 
 def create_app():
     if not SECRET_KEY:
         raise RuntimeError("Configura SECRET_KEY con un valor aleatorio y privado antes de iniciar la aplicación.")
-    frontend = Path(__file__).resolve().parents[2] / "frontend"
-    app = Flask(__name__, static_folder=str(frontend), static_url_path="")
+    app = Flask(__name__)
     app.secret_key = SECRET_KEY
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "1") == "1",
+        # Vite local runs use HTTP; deployments must set this to 1 behind HTTPS.
+        SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
     )
     app.json.ensure_ascii = False
-    meta.create_all(engine)  # crea tablas que falten
-    if "ciudad" not in {column["name"] for column in inspect(engine).get_columns("PROYECTOS")}:
-        with engine.begin() as con:
-            con.execute(text("ALTER TABLE PROYECTOS ADD COLUMN ciudad VARCHAR(100)"))
-            con.execute(text("UPDATE PROYECTOS SET ciudad='Bogotá' WHERE ciudad IS NULL"))
+    try:
+        meta.create_all(engine)  # crea tablas que falten
+        if "ciudad" not in {column["name"] for column in inspect(engine).get_columns("PROYECTOS")}:
+            with engine.begin() as con:
+                con.execute(text("ALTER TABLE PROYECTOS ADD COLUMN ciudad VARCHAR(100)"))
+                con.execute(text("UPDATE PROYECTOS SET ciudad='Bogot\u00e1' WHERE ciudad IS NULL"))
+    except SQLAlchemyError as error:
+        app.logger.exception("No se pudo inicializar la base de datos SQL.")
+        raise RuntimeError("La base de datos SQL no est\u00e1 disponible o no pudo inicializarse.") from error
     register_errors(app)
     asegurar_indices_bim()
-    for modulo in (auth, insumos, usuarios, proyectos, presupuestos, actividades_bim):
+    for modulo in (auth, insumos, usuarios, proyectos, presupuestos, actividades_bim, dashboard):
         app.register_blueprint(modulo.bp)
 
     @app.before_request
     def exigir_sesion():
+        if request.method == "OPTIONS":
+            return None
+        # SameSite=Lax alone does not prevent requests from a hostile same-site
+        # subdomain. Browser writes must come from a configured frontend origin.
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            origin = request.headers.get("Origin")
+            allowed_origins = {item.strip() for item in CORS_ORIGIN.split(",") if item.strip()}
+            if origin and origin not in allowed_origins:
+                return jsonify(error="Origen no permitido"), 403
         publico = (
-            request.path in ("/", "/login", "/registro", "/terminos", "/privacidad", "/contacto", "/api/salud")
+            request.path == "/api/salud"
             or request.path.startswith("/api/auth/")
-            or request.path.startswith("/api/actividades-bim")
         )
-        dashboard = request.path in ("/dashboard", "/dashboard.html", "/perfil")
         if publico:
             return None
         if not session.get("id_usuario"):
             if request.path.startswith("/api/"):
                 return jsonify(error="Inicia sesión para continuar"), 401
-            if dashboard:
-                return redirect("/login")
         elif request.path.startswith("/api/") and request.method in ("POST", "PUT", "PATCH", "DELETE") and not request.path.startswith("/api/auth/"):
             with engine.connect() as con:
                 rol = con.execute(text("SELECT rol FROM USUARIOS WHERE id_usuario = :id"),
@@ -66,38 +74,6 @@ def create_app():
             if rol != "administrador":
                 return jsonify(error="Solo un administrador puede consultar usuarios"), 403
         return None
-
-    @app.get("/")
-    def inicio():
-        return send_from_directory(frontend, "index.html")
-
-    @app.get("/login")
-    def pagina_login():
-        return send_from_directory(frontend, "login.html")
-
-    @app.get("/registro")
-    def pagina_registro():
-        return send_from_directory(frontend, "registro.html")
-
-    @app.get("/dashboard")
-    def pagina_dashboard():
-        return send_from_directory(frontend, "dashboard.html")
-
-    @app.get("/perfil")
-    def pagina_perfil():
-        return send_from_directory(frontend, "perfil.html")
-
-    @app.get("/terminos")
-    def pagina_terminos():
-        return send_from_directory(frontend, "terminos.html")
-
-    @app.get("/privacidad")
-    def pagina_privacidad():
-        return send_from_directory(frontend, "privacidad.html")
-
-    @app.get("/contacto")
-    def pagina_contacto():
-        return send_from_directory(frontend, "contacto.html")
 
     @app.get("/api/salud")
     def salud():

@@ -46,7 +46,7 @@ from .config import DATA_DIR, DB_URL, MONGO_DB_NAME, MONGO_URI
 # 1. Base de Datos Relacional (SQLAlchemy Core)
 # ------------------------------------------------------------------------------
 DATA_DIR.mkdir(exist_ok=True)
-engine = create_engine(DB_URL)
+engine = create_engine(DB_URL, pool_pre_ping=True)
 
 # ------------------------------------------------------------------------------
 # 2. Base de Datos Documental NoSQL (PyMongo / MongoDB)

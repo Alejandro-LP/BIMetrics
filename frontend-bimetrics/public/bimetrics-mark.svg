@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="brand" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="14" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".02"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="#111827"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="17.5" stroke="url(#brand)" stroke-opacity=".55"/>
+  <path d="m32 12 17 9.5v20L32 51 15 41.5v-20L32 12Z" fill="url(#glass)" stroke="url(#brand)" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M32 12v19m17-9.5-17 9.5-17-9.5M32 31v20" stroke="url(#brand)" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="m23 36 6 3.5v6L23 42v-6Zm12 3.5 6-3.5v6l-6 3.5v-6Z" fill="url(#brand)"/>
+</svg>

@@ -9,6 +9,7 @@ os.environ["SECRET_KEY"] = "clave-super-secreta-para-tests-poliglotas-12345"
 
 import mongomock
 import pytest
+from pymongo.errors import ServerSelectionTimeoutError
 from sqlalchemy import text
 
 from app import create_app
@@ -37,6 +38,8 @@ def app_cliente(mock_db):
     """Cliente de pruebas de Flask con base de datos SQL y NoSQL mockeada."""
     app = create_app()
     with app.test_client() as cliente:
+        with cliente.session_transaction() as sesion:
+            sesion["id_usuario"] = 101
         # Insertar un usuario directo en SQL para las pruebas
         with engine.begin() as con:
             con.execute(text("""
@@ -128,8 +131,23 @@ def test_endpoint_poliglota_usuario_no_existe(app_cliente, mock_db):
     assert "no existe usuario" in resp.get_json()["error"].lower()
 
 
+def test_limite_bim_invalido_devuelve_400(app_cliente):
+    resp = app_cliente.get("/api/actividades-bim/usuario/101?limite=abc")
+    assert resp.status_code == 400
+    assert "entero" in resp.get_json()["error"].lower()
+
+
+def test_mongo_no_disponible_responde_json_503(app_cliente):
+    with patch("app.routes.actividades_bim.listar_actividades_bim", side_effect=ServerSelectionTimeoutError("offline")):
+        resp = app_cliente.get("/api/actividades-bim/usuario/101")
+    assert resp.status_code == 503
+    assert "error" in resp.get_json()
+
+
 def test_validacion_integridad_cruzada_al_crear(app_cliente, mock_db):
     """No permite registrar una actividad BIM si el usuario no existe en SQL."""
+    with engine.begin() as con:
+        con.execute(text("UPDATE USUARIOS SET rol='administrador' WHERE id_usuario=101"))
     resp = app_cliente.post("/api/actividades-bim", json={
         "id_usuario": 88888,  # Usuario inexistente
         "tipo_evento": "importacion_revit_txt",
@@ -138,3 +156,5 @@ def test_validacion_integridad_cruzada_al_crear(app_cliente, mock_db):
     })
     assert resp.status_code == 404
     assert "no existe en sql" in resp.get_json()["error"].lower()
+    with engine.begin() as con:
+        con.execute(text("UPDATE USUARIOS SET rol='arquitecto' WHERE id_usuario=101"))

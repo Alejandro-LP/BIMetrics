@@ -29,14 +29,17 @@ def crear():
     id_usuario = session.get("id_usuario")
     if not id_usuario:
         raise ErrorApi(401, "Inicia sesion para continuar")
-    if not isinstance(d["nombre_obra"], str) or not d["nombre_obra"].strip():
-        raise ErrorApi(400, "El nombre de la obra es obligatorio")
-    if not isinstance(ciudad, str) or not ciudad.strip():
-        raise ErrorApi(400, "Selecciona la ciudad del proyecto")
+    if not isinstance(d["nombre_obra"], str) or not d["nombre_obra"].strip() or len(d["nombre_obra"].strip()) > 150:
+        raise ErrorApi(400, "El nombre debe tener entre 1 y 150 caracteres")
+    if not isinstance(ciudad, str) or not ciudad.strip() or len(ciudad.strip()) > 100:
+        raise ErrorApi(400, "La ciudad debe tener entre 1 y 100 caracteres")
+    cliente = d.get("cliente")
+    if cliente is not None and (not isinstance(cliente, str) or len(cliente.strip()) > 150):
+        raise ErrorApi(400, "El nombre del cliente no es válido")
     with engine.begin() as con:
         r = con.execute(text(
             "INSERT INTO PROYECTOS (id_usuario, nombre_obra, cliente, ciudad) VALUES (:u, :o, :c, :ciudad)"),
-            {"u": id_usuario, "o": d["nombre_obra"].strip(), "c": d.get("cliente"), "ciudad": ciudad.strip()})
+            {"u": id_usuario, "o": d["nombre_obra"].strip(), "c": cliente.strip() if cliente else None, "ciudad": ciudad.strip()})
         return jsonify(obtener(con, "PROYECTOS", "id_proyecto", r.lastrowid)), 201
 
 

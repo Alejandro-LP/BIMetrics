@@ -13,8 +13,13 @@ CAMPOS = ["nombre_completo", "email", "rol"]
 
 def _validar():
     d = pedir(CAMPOS)
-    if d["rol"] not in ROLES:
+    if not isinstance(d["rol"], str) or d["rol"] not in ROLES:
         raise ErrorApi(400, f"'rol' debe ser uno de: {', '.join(sorted(ROLES))}")
+    if not isinstance(d["nombre_completo"], str) or not isinstance(d["email"], str):
+        raise ErrorApi(400, "El nombre y el correo deben ser texto")
+    nombre, email = d["nombre_completo"].strip(), d["email"].strip().lower()
+    if not nombre or len(nombre) > 150 or not email or len(email) > 254 or "@" not in email:
+        raise ErrorApi(400, "El nombre o el correo no son válidos")
     if d["rol"] == "administrador":
         with engine.connect() as con:
             actual = con.execute(text(
@@ -22,7 +27,7 @@ def _validar():
                 {"id": session.get("id_usuario")}).scalar()
         if actual != "administrador":
             raise ErrorApi(403, "Solo un administrador puede asignar ese rol")
-    return {"n": d["nombre_completo"].strip(), "e": d["email"].strip().lower(), "r": d["rol"]}
+    return {"n": nombre, "e": email, "r": d["rol"]}
 
 
 @bp.get("")
