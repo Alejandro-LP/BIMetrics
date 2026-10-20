@@ -1,84 +1,113 @@
-# ObraPresupuesto Colombia
+# BIMetrics - Plataforma SaaS de Presupuestos de Obra y Estimación BIM 5D
 
-Plataforma de gestión de presupuestos de obra para edificación en Colombia. Permite administrar un catálogo de
-insumos, calcular presupuestos por actividad y reutilizar presupuestos anteriores.
+Plataforma web integral para la **gestión de presupuestos de edificación en Colombia** y **estimación paramétrica BIM 5D**. Permite administrar catálogos de insumos, importar cómputos métricos desde software BIM (Autodesk Revit y Graphisoft ArchiCAD), calcular presupuestos dinámicos por actividad y mantener trazabilidad mediante una **arquitectura de persistencia políglota** (SQL relacional + NoSQL documental).
 
-**Stack:** Python 3.9+, Flask (API REST), SQLAlchemy, SQLite (MySQL opcional), MongoDB (NoSQL con PyMongo), HTML/CSS/JS con GSAP.
+**Stack:** Python 3.9+, Flask 3 (API REST), SQLAlchemy 2 (Core), SQLite / MySQL (SQL), MongoDB (NoSQL con PyMongo), HTML5/CSS3/JS Vanilla con GSAP.
 
-## Estructura
+---
+
+## Estructura del Proyecto
 
 ```
-obrapresupuesto/
+bimetrics/
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py        # fábrica de la app (create_app)
-│   │   ├── config.py          # configuración y variables de entorno
-│   │   ├── database.py        # conexión a la base de datos
-│   │   ├── models.py          # esquema (según el diagrama ER)
-│   │   ├── errors.py          # errores JSON y CORS
-│   │   ├── utils.py           # validaciones y utilidades
-│   │   ├── routes/            # autenticación y endpoints por recurso
-│   │   └── services/          # lógica de negocio (cálculo de presupuestos)
-│   ├── scripts/poblar_bd.py   # carga una demo unica
-│   ├── tests/test_api.py      # pruebas automáticas
-│   ├── run.py                 # punto de entrada
-│   └── requirements.txt
-├── frontend/                  # landing, acceso y dashboard
-│   ├── index.html             # landing pública
-│   ├── login.html, registro.html, dashboard.html
-│   ├── css/                   # estilos de sitio y dashboard
-│   └── js/                    # sesión, formularios y dashboard
-├── docs/
-│   ├── diagramas/             # CSV para importar el ER en Lucidchart
-│   └── sql/                   # esquema y ejemplo para MySQL
-├── data/                      # aquí se guarda presupuestos.db (no se sube a git)
-├── .env.example
+│   │   ├── __init__.py        # Fábrica de la app (create_app), registro de blueprints y seguridad
+│   │   ├── config.py          # Configuración central y variables de entorno (.env)
+│   │   ├── database.py        # Conexión híbrida: SQLAlchemy (SQL) + PyMongo (MongoDB)
+│   │   ├── models.py          # Esquema relacional (MetaData según diagrama ER)
+│   │   ├── errors.py          # Manejador centralizado de excepciones ErrorApi y CORS
+│   │   ├── utils.py           # Validaciones numéricas, serializadores y utilidades
+│   │   ├── routes/            # Blueprints REST (auth, insumos, presupuestos, proyectos, actividades_bim)
+│   │   └── services/          # Lógica de dominio (cálculo presupuestal y CRUD NoSQL BIM)
+│   ├── scripts/poblar_bd.py   # Script de carga de datos demo para pruebas
+│   ├── tests/                 # Pruebas automatizadas (test_api.py, test_actividades_bim.py)
+│   ├── run.py                 # Punto de entrada de la aplicación Flask
+│   └── requirements.txt       # Dependencias oficiales del backend
+├── frontend/                  # Interfaz de usuario (Vanilla JS, CSS modular)
+│   ├── index.html             # Landing page pública
+│   ├── login.html, registro.html, dashboard.html, perfil.html
+│   ├── css/                   # Estilos del sitio y del dashboard
+│   └── js/                    # Controladores de interfaz, llamadas a la API y animaciones
+├── docs/                      # Diagramas entidad-relación y scripts DDL
+├── data/                      # Almacén de base de datos SQLite local (ignorado en git)
+├── .env.example               # Plantilla de variables de entorno (SQL + MongoDB)
 └── .gitignore
 ```
 
-## Puesta en marcha
+---
 
-Desde la raiz del proyecto, en PowerShell:
+## Puesta en Marcha
+
+Desde la raíz del proyecto, en PowerShell:
 
 ```powershell
+# 1. Crear y activar entorno virtual
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+
+# 2. Instalar dependencias
 pip install -r backend\requirements.txt
+
+# 3. Configurar variables de entorno
+# Copia .env.example como .env y ajusta tus claves:
+Copy-Item .env.example .env
+
+# 4. Poblar datos demostrativos en la base de datos relacional
 cd backend
 python -m scripts.poblar_bd --reset
+
+# 5. Iniciar el servidor de desarrollo
 python run.py
 ```
 
-Antes de iniciar, crea un archivo `.env` en la raíz y configura `SECRET_KEY` con una clave aleatoria privada (puedes generarla con `python -c "import secrets; print(secrets.token_hex(32))"`). Para desarrollo local servido por HTTP, agrega `SESSION_COOKIE_SECURE=0`; en producción HTTPS usa `SESSION_COOKIE_SECURE=1`. No subas `.env` al repositorio.
+### Configuración del archivo `.env`
 
-Abre http://127.0.0.1:5000 para entrar al landing, crear una cuenta o iniciar sesion. Elige Arquitecto o Ingeniero para editar presupuestos; Cliente tiene acceso de consulta. Desde el dashboard se pueden agregar insumos del catalogo y quitar partidas. El perfil permite actualizar nombre, correo y contrasena. Flask sirve las paginas y la API desde el mismo origen, por lo que no abras los HTML con doble clic.
+Antes de iniciar la aplicación en desarrollo o producción, define las siguientes variables en `.env`:
 
-Los proyectos guardan su ciudad y consultan primero el precio unitario registrado para esa ciudad. Un arquitecto puede crear un insumo desde el diálogo de partidas y cargar su precio local; las tarifas existentes son referencias ilustrativas y deben verificarse antes de usarlas. Las bases de datos antiguas reciben Bogotá como ciudad inicial para los proyectos existentes. Los presupuestos conservan el precio aplicado al momento de agregar cada partida.
+```dotenv
+# Seguridad de sesión de Flask
+SECRET_KEY=clave-secreta-aleatoria-generada-en-consola
+SESSION_COOKIE_SECURE=0    # Usa 0 para desarrollo local HTTP; 1 para producción HTTPS
 
-## Pruebas
+# Base Relacional SQL (SQLite por defecto, o MySQL)
+DATABASE_URL=sqlite:///../data/presupuestos.db
+# DATABASE_URL=mysql+pymysql://usuario:clave@localhost:3306/bimetrics_db
 
-```bash
-cd backend
-python -m pytest -q
+# Base Documental NoSQL (MongoDB - Logs de actividad e importaciones BIM)
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=bimetrics_nosql
 ```
 
-## Endpoints principales
+Abre http://127.0.0.1:5000 para entrar a la plataforma:
+- **Landing page**: Presentación general de la plataforma y propuesta de valor.
+- **Roles admitidos**: `arquitecto`, `ingeniero`, `administrador` (edición y gestión completa) y `cliente` (modo consulta de solo lectura).
+- **Dashboard interactivo**: Administración de proyectos, desglose de insumos y parametrización de presupuestos.
+- **Perfil de usuario**: Edición de nombre, correo y credenciales.
 
-| Recurso | Operaciones |
-|---|---|
-| `/api/auth` | registro por rol, login/logout, sesion y edicion de perfil |
-| `/api/insumos` | listar (`?q=`), ver, crear, editar, eliminar |
-| `/api/usuarios` | listar (`?rol=`), ver, crear, editar, eliminar |
-| `/api/proyectos` | listar, crear, historial en `/<id>/presupuestos` |
-| `/api/presupuestos` | listar, ver con detalle, crear (con o sin líneas) |
-| `/api/presupuestos/<id>/calcular` | recalcula y guarda el costo total |
-| `/api/presupuestos/<id>/duplicar` | copia el presupuesto con los costos vigentes |
-| `/api/presupuestos/<id>/detalle` | agregar (`POST`) y quitar (`DELETE /<id_detalle>`) líneas |
-| `/api/actividades-bim` | CRUD de telemetría e importaciones BIM; endpoint híbrido en `/usuario/<id>` |
+---
+
+## Endpoints Principales de la API
+
+| Recurso | Método | Ruta | Descripción |
+|---|---|---|---|
+| `/api/salud` | GET | `/api/salud` | Healthcheck público del sistema |
+| `/api/auth` | POST / GET / PUT | `/registro`, `/login`, `/logout`, `/sesion`, `/perfil` | Autenticación, sesión y perfil de usuario |
+| `/api/insumos` | GET / POST / PUT / DELETE | `/api/insumos` (`?q=`), `/<id>` | CRUD de insumos y precios unitarios |
+| `/api/usuarios` | GET / POST / PUT / DELETE | `/api/usuarios` (`?rol=`), `/<id>` | Administración RBAC de usuarios |
+| `/api/proyectos` | GET / POST | `/api/proyectos`, `/<id>/presupuestos` | Proyectos y su historial presupuestal |
+| `/api/presupuestos` | GET / POST | `/api/presupuestos`, `/<id>` | Consulta y creación de presupuestos |
+| `/api/presupuestos` | POST | `/<id>/calcular` | Recalcula el costo total oficial en el backend |
+| `/api/presupuestos` | POST | `/<id>/duplicar` | Duplica presupuesto tomando precios vigentes |
+| `/api/presupuestos` | POST / DELETE | `/<id>/detalle`, `/<id>/detalle/<id_det>` | Gestión de líneas y partidas presupuestales |
+| **`/api/actividades-bim`** | **GET** | **`/api/actividades-bim/usuario/<id>`** | **Endpoint Híbrido Políglota (Perfil SQL + Logs NoSQL)** |
+| `/api/actividades-bim` | POST / GET / PUT / DELETE | `/api/actividades-bim`, `/<id_actividad>` | CRUD de logs e importaciones BIM en MongoDB |
+
+---
 
 ## Persistencia Políglota (SQL + NoSQL con MongoDB)
 
-BIMetrics implementa una arquitectura de **persistencia políglota** diseñada para resolver dos necesidades computacionales opuestas en proyectos de construcción y estimación BIM 5D:
+BIMetrics implementa una arquitectura de **persistencia políglota** (*Polyglot Persistence*) diseñada para resolver dos necesidades computacionales opuestas en proyectos de construcción y estimación BIM 5D:
 
 1. **Núcleo Relacional Estructurado (SQL - SQLite / MySQL):**
    - Garantiza consistencia transaccional **ACID** para usuarios, perfiles RBAC, proyectos, catálogos de insumos y presupuestos oficiales.
@@ -88,12 +117,13 @@ BIMetrics implementa una arquitectura de **persistencia políglota** diseñada p
    - Colección: `actividades_bim`.
    - **Por qué NoSQL para importaciones y logs BIM:**
      * **Agilidad de Esquema (Schema Agility):** Las tablas de cantidades (.txt o .csv) exportadas de Revit o ArchiCAD contienen parámetros muy divergentes según la especialidad (estructural, hidrosanitaria, eléctrica) y versión del software. Un esquema relacional requeriría tablas EAV o cientos de columnas nulas.
-     * **Jerarquía Natural de Datos:** Los cómputos BIM poseen estructuras anidadas (Fases, Niveles, Familias, Advertencias de cómputo) que se representan de forma limpia como subdocumentos JSON/BSON.
+     * **Jerarquía Natural de Datos:** Los cómputos BIM poseen estructuras anidadas (Fases, Niveles, Familias, Advertencias de cómputo) que se representan de forma limpia como subdocumentos JSON/BSON sin `JOIN`s costosos.
      * **Alto Rendimiento en Ingesta Append-Only:** Desacopla la auditoría y telemetría de importación sin generar bloqueos (`table locks`) sobre las tablas financieras principales.
+     * **Aislamiento Transaccional (ACID vs. BASE):** Una discrepancia de formato en un archivo CAD/BIM nunca bloquea las transacciones contables del presupuesto.
 
 ### Configuración del Entorno NoSQL
 
-En el archivo `.env` en la raíz del proyecto, define las variables de conexión:
+En el archivo `.env` en la raíz del proyecto:
 
 ```dotenv
 MONGO_URI=mongodb://localhost:27017
@@ -222,15 +252,25 @@ curl -X GET http://127.0.0.1:5000/api/actividades-bim/usuario/1
 }
 ```
 
-#### 4. Ejecutar Pruebas Automatizadas
+---
 
-Para validar las operaciones CRUD NoSQL y el endpoint políglota:
+## Pruebas Automatizadas
+
+Para validar las operaciones CRUD NoSQL y el endpoint políglota con simulación determinística en memoria (`mongomock`):
 
 ```bash
 cd backend
 python -m pytest tests/test_actividades_bim.py -v
 ```
 
-## Datos
+---
 
-La carga de demostracion crea un solo usuario, un proyecto y un presupuesto de viga con seis insumos. El total ilustrativo es $1.611.150 COP; no representa una cotizacion oficial. Desde `backend/`, ejecuta `python -m scripts.poblar_bd --reset` para reemplazar los datos por esta demo unica. El costo de cada insumo se copia al presupuesto (`costo_unitario_aplicado`), asi que cambiar el catalogo no altera presupuestos ya calculados.
+## Datos de Demostración
+
+La carga de demostración crea un usuario, un proyecto y un presupuesto de viga con seis insumos base. El total ilustrativo es **$1.611.150 COP** (concreto 3000 PSI 0,95 m³; acero 1/2" 8 varillas; acero 3/8" 10 varillas; alambre negro 3 kg; oficial 2 jornales; ayudante 3 jornales).
+
+Para restablecer la base de datos a este estado inicial, ejecuta desde `backend/`:
+
+```bash
+python -m scripts.poblar_bd --reset
+```
