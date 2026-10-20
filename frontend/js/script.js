@@ -52,7 +52,7 @@ const roleViews = {
 
 function applyRoleView(user) {
   const view = roleViews[user.rol] || roleViews.arquitecto;
-  document.title = `ObraPresupuesto · ${view.label}`;
+  document.title = `BIMetrics · ${view.label}`;
   $("#user-role").textContent = view.label;
   $("#role-eyebrow").firstChild.textContent = `${view.eyebrow} `;
   $("#role-title").textContent = view.title;

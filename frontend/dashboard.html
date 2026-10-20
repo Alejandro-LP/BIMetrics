@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f2f6fb">
-  <title>ObraPresupuesto · Control de obra</title>
+  <title>BIMetrics · Control de obra</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/site.css?v=3d-building-20261015">
 </head>
 <body>
   <aside class="sidebar">
-    <a class="brand" href="/" aria-label="ObraPresupuesto, inicio"><span class="brand-mark">O<span>.</span></span><span>obra<span class="brand-light">presupuesto</span></span></a>
+    <a class="brand" href="/" aria-label="BIMetrics, inicio"><span class="brand-mark">B<span>.</span></span><span>BIM<span class="brand-light">etrics</span></span></a>
     <p class="nav-label">ESPACIO DE TRABAJO</p>
     <nav aria-label="Principal">
       <a class="nav-link active" href="#inicio"><span class="nav-icon">▦</span>Resumen</a>
@@ -18,7 +18,7 @@
       <a class="nav-link" href="#presupuesto"><span class="nav-icon">▧</span>Presupuestos</a>
     </nav>
     <div class="sidebar-note"><span class="note-dot"></span><div><strong>Moneda de referencia</strong><small>COP · Ajusta precios a tu región</small></div></div>
-    <div class="profile"><span class="avatar" id="user-avatar">OP</span><div><strong id="user-name">ObraPresupuesto</strong><small id="user-role">Gestión de costos</small></div></div>
+    <div class="profile"><span class="avatar" id="user-avatar">BM</span><div><strong id="user-name">BIMetrics</strong><small id="user-role">Gestión de costos y BIM 5D</small></div></div>
   </aside>
 
   <main class="content" id="inicio">
@@ -70,7 +70,7 @@
     </section>
 
     <section class="project-summary" aria-label="Proyecto seleccionado">
-      <div class="project-summary-icon" aria-hidden="true">OP</div>
+      <div class="project-summary-icon" aria-hidden="true">BM</div>
       <div class="project-summary-copy"><span class="summary-kicker">PROYECTO ACTIVO</span><h2 id="current-project-name">Selecciona un proyecto</h2><div class="project-tags"><span id="current-project-city">Ciudad pendiente</span><span id="current-project-client">Cliente no indicado</span></div></div>
       <div class="project-summary-divider"></div>
       <div class="project-summary-meta"><span>RESPONSABLE</span><strong id="current-project-owner">?</strong></div>
@@ -94,7 +94,7 @@
       <div class="table-shell"><div class="table-scroll"><table><thead><tr><th>INSUMO</th><th>UNIDAD</th><th class="numeric">CANTIDAD</th><th class="numeric">PRECIO UNITARIO</th><th class="numeric">SUBTOTAL</th><th></th></tr></thead><tbody id="lines"><tr><td colspan="6" class="empty">Conecta con la API para ver los datos del proyecto.</td></tr></tbody><tfoot><tr><td colspan="4">Total del presupuesto <small>Valores expresados en pesos colombianos</small></td><td class="numeric" id="table-total">—</td><td></td></tr></tfoot></table></div></div>
       <footer class="workspace-foot"><span><span class="foot-mark">i</span> Los precios aplicados quedan guardados al crear cada presupuesto.</span><span id="api-hint">API local · 127.0.0.1:5000</span><a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a></footer>
     </section>
-    <footer class="page-foot">OBRAPRESUPUESTO <span>·</span> HERRAMIENTA DE CONTROL DE OBRA<a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a></footer>
+    <footer class="page-foot">BIMETRICS <span>·</span> HERRAMIENTA DE CONTROL DE OBRA<a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a></footer>
     <dialog class="line-dialog" id="add-dialog" aria-labelledby="add-title"><form id="add-form"><div class="dialog-heading"><div><p class="eyebrow">NUEVA PARTIDA</p><h2 id="add-title">Agregar insumo</h2></div><button class="dialog-close" id="close-add" type="button" aria-label="Cerrar">×</button></div><label for="insumo-select">Insumo del cat&aacute;logo</label><select id="insumo-select" required><option value="">Selecciona un insumo</option></select><button class="button button-quiet" id="new-item-toggle" type="button">+ Crear un insumo para esta ciudad</button><div id="new-item-fields" hidden><label for="new-item-name">Nombre del insumo</label><input id="new-item-name" maxlength="150" placeholder="Ej. Arena lavada"><label for="new-item-unit">Unidad</label><input id="new-item-unit" maxlength="30" placeholder="Ej. m³"><label for="new-item-price">Precio unitario en <span id="item-city-label"></span> (COP)</label><input id="new-item-price" type="number" min="0.01" step="0.01" placeholder="Precio local" /><p class="dialog-hint">Si escribes el nombre de un insumo ya existente, se actualizará su precio para esta ciudad; si es nuevo, se añadirá al catálogo.</p></div><p id="price-city-note" class="dialog-hint"></p><label for="quantity-input">Cantidad</label><input id="quantity-input" type="number" min="0.001" step="any" placeholder="Ej. 2.5" required><p class="dialog-hint">El presupuesto guardar&aacute; el precio vigente del cat&aacute;logo.</p><div class="dialog-actions"><button class="button button-quiet" id="cancel-add" type="button">Cancelar</button><button class="button button-primary" id="save-line" type="submit">Agregar al presupuesto</button></div></form></dialog>
     <dialog class="line-dialog" id="project-dialog" aria-labelledby="project-dialog-title"><form id="project-form"><div class="dialog-heading"><div><p class="eyebrow">NUEVA OBRA</p><h2 id="project-dialog-title">Iniciar proyecto</h2></div><button class="dialog-close" id="close-project" type="button" aria-label="Cerrar">×</button></div><label for="project-name">Nombre del proyecto</label><input id="project-name" maxlength="150" placeholder="Ej. Casa en Chapinero" required><label for="project-city">Ciudad del proyecto</label><select id="project-city" required><option value="Bogotá">Bogotá</option><option>Medellín</option><option>Cali</option><option>Barranquilla</option><option>Cartagena</option><option>Bucaramanga</option><option>Pereira</option><option>Manizales</option><option>Armenia</option><option>Ibagué</option><option>Pasto</option><option>Cúcuta</option><option>Villavicencio</option><option>Neiva</option><option>Montería</option><option>Santa Marta</option><option>Sincelejo</option><option>Popayán</option><option>Valledupar</option><option>Tunja</option><option>Riohacha</option><option>Quibdó</option><option>Yopal</option><option>Florencia</option><option>Mocoa</option><option>Arauca</option><option>San José del Guaviare</option><option>Leticia</option><option>Mitú</option><option>Puerto Carreño</option><option>San Andrés</option></select><label for="project-client">Cliente (opcional)</label><input id="project-client" maxlength="150" placeholder="Nombre del cliente"><div class="dialog-actions"><button class="button button-quiet" id="cancel-project" type="button">Cancelar</button><button class="button button-primary" type="submit">Crear proyecto</button></div></form></dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

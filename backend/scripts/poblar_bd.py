@@ -38,7 +38,7 @@ def main(reset: bool):
         usuario = con.execute(text(
             "INSERT INTO USUARIOS (nombre_completo, email, rol) "
             "VALUES (:nombre, :email, :rol)"),
-            {"nombre": "Equipo de demostración", "email": "demo@obrapresupuesto.local", "rol": "arquitecto"})
+            {"nombre": "Equipo de demostración", "email": "demo@bimetrics.local", "rol": "arquitecto"})
         proyecto = con.execute(text(
             "INSERT INTO PROYECTOS (id_usuario, nombre_obra, cliente, ciudad) "
             "VALUES (:usuario, :obra, :cliente, :ciudad)"),
@@ -78,6 +78,6 @@ def main(reset: bool):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Carga la demo única de ObraPresupuesto")
+    parser = argparse.ArgumentParser(description="Carga la demo única de BIMetrics")
     parser.add_argument("--reset", action="store_true", help="borra los datos existentes y carga solo la demo")
     main(parser.parse_args().reset)

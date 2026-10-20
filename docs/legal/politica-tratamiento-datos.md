@@ -1,4 +1,4 @@
-# Política de tratamiento de datos personales — ObraPresupuesto
+# Política de tratamiento de datos personales — BIMetrics
 
 **Borrador personalizado para revisión previa a publicación.** Vigencia prevista: [FECHA DE PUBLICACIÓN]. Sitio: [DOMINIO DE PRODUCCIÓN]. No publicar hasta confirmar proveedor, país de alojamiento, periodos de logs/copias de respaldo y acceso por roles.
 
@@ -8,7 +8,7 @@ El responsable del tratamiento para cuentas, solicitudes de contacto y operació
 
 ## 2. Alcance y finalidades
 
-ObraPresupuesto es una plataforma educativa y de validación técnica para organizar proyectos y presupuestos de obra. Actualmente es gratuita. El responsable trata datos para:
+BIMetrics es una plataforma educativa y de validación técnica para organizar proyectos y presupuestos de obra. Actualmente es gratuita. El responsable trata datos para:
 
 - Crear, autenticar, administrar y proteger cuentas; prestar las funciones que solicita el usuario.
 - Guardar proyectos, nombres de clientes que el usuario decida ingresar, insumos, cantidades, costos, cálculos e historial de presupuestos.
@@ -28,11 +28,11 @@ No se realizan actualmente campañas promocionales, perfilamiento publicitario, 
 | Seguridad y operación | Cookie de sesión y registros técnicos que genere el proveedor de alojamiento, que pueden incluir dirección IP, fecha, navegador y solicitudes | Necesarios para sesión, operación y prevención de incidentes. El proveedor, campos y periodos exactos de logs deben confirmarse antes del lanzamiento: [PROVEEDOR, PAÍS Y PLAZO DE CONSERVACIÓN DE LOGS]. |
 | Archivos de presupuesto | No habilitados en la versión actual. Cuando se habiliten, podrían contener datos personales de terceros. | No cargar archivos hasta que se publique una actualización con finalidades, formatos, acceso, proveedor y retención. |
 
-ObraPresupuesto no solicita datos sensibles ni pretende tratar datos de niños, niñas o adolescentes. El servicio está dirigido a mayores de 18 años. No ingrese información sensible, datos de menores, identificaciones ni información personal innecesaria de terceros en campos libres o archivos.
+BIMetrics no solicita datos sensibles ni pretende tratar datos de niños, niñas o adolescentes. El servicio está dirigido a mayores de 18 años. No ingrese información sensible, datos de menores, identificaciones ni información personal innecesaria de terceros en campos libres o archivos.
 
 ## 4. Datos de terceros que ingresan los usuarios
 
-El usuario decide si registra el nombre de un cliente o propietario. Debe contar con autorización o fundamento jurídico aplicable, informar a esa persona cuando corresponda y usar solo datos necesarios. Respecto de datos que el usuario carga por sus propios fines, el usuario puede ser responsable y ObraPresupuesto puede actuar como encargado si trata los datos solo bajo sus instrucciones. El rol efectivo depende de quién decide cada finalidad y deberá reflejarse en las condiciones y contrato de transmisión que correspondan. El responsable no usará esos datos para publicidad.
+El usuario decide si registra el nombre de un cliente o propietario. Debe contar con autorización o fundamento jurídico aplicable, informar a esa persona cuando corresponda y usar solo datos necesarios. Respecto de datos que el usuario carga por sus propios fines, el usuario puede ser responsable y BIMetrics puede actuar como encargado si trata los datos solo bajo sus instrucciones. El rol efectivo depende de quién decide cada finalidad y deberá reflejarse en las condiciones y contrato de transmisión que correspondan. El responsable no usará esos datos para publicidad.
 
 ## 5. Autorización y prueba
 
@@ -40,7 +40,7 @@ Cuando la ley exija autorización, se solicitará antes de recolectar o usar los
 
 ### Texto base para registro y contacto
 
-> **Responsable:** Jorge Alejandro Lopez Paez. Trataremos los datos que ingreses para crear y administrar tu cuenta, prestar las funciones de ObraPresupuesto, guardar tus proyectos y presupuestos, atender tus solicitudes y proteger el servicio. Consulta la [Política de tratamiento de datos personales]([ENLACE A LA POLÍTICA]) para conocer tus derechos, canales y plazos. Puedes solicitar consulta, actualización, corrección, supresión o revocatoria en [joral2112@hotmail.com](mailto:joral2112@hotmail.com). La supresión puede estar limitada si existe una obligación legal o contractual de conservar información.
+> **Responsable:** Jorge Alejandro Lopez Paez. Trataremos los datos que ingreses para crear y administrar tu cuenta, prestar las funciones de BIMetrics, guardar tus proyectos y presupuestos, atender tus solicitudes y proteger el servicio. Consulta la [Política de tratamiento de datos personales]([ENLACE A LA POLÍTICA]) para conocer tus derechos, canales y plazos. Puedes solicitar consulta, actualización, corrección, supresión o revocatoria en [joral2112@hotmail.com](mailto:joral2112@hotmail.com). La supresión puede estar limitada si existe una obligación legal o contractual de conservar información.
 
 Casilla obligatoria, sin premarcar:
 
@@ -70,7 +70,7 @@ Las solicitudes de contacto se conservarán durante [DEFINIR PLAZO] después de 
 
 El sitio está previsto para alojarse en infraestructura de nube fuera de Colombia. Antes del lanzamiento se completarán: **[PROVEEDOR Y ENTIDAD CONTRACTUAL]**, **[PAÍS/REGIÓN DE ALMACENAMIENTO Y RESPALDOS]**, política de privacidad del proveedor, subencargados y plazo de conservación.
 
-Si el proveedor trata datos por cuenta de Jorge y bajo instrucciones, se documentará una transmisión internacional mediante contrato que establezca alcance, finalidades, seguridad, confidencialidad, atención de derechos y eliminación/devolución al terminar. Si el proveedor recibe datos como responsable independiente, se analizará como transferencia internacional y se aplicarán las reglas de nivel adecuado y demás supuestos legales. La lista vigente de la SIC consultada en octubre de 2026 incluye a Estados Unidos entre los países con nivel adecuado; aun así, se deben verificar país, entidad contratante y flujos reales y aplicar responsabilidad demostrada. Si se activa una pasarela de pagos, se identificará antes de usarla; los datos completos de tarjeta serán gestionados por esa pasarela y no se almacenarán en ObraPresupuesto.
+Si el proveedor trata datos por cuenta de Jorge y bajo instrucciones, se documentará una transmisión internacional mediante contrato que establezca alcance, finalidades, seguridad, confidencialidad, atención de derechos y eliminación/devolución al terminar. Si el proveedor recibe datos como responsable independiente, se analizará como transferencia internacional y se aplicarán las reglas de nivel adecuado y demás supuestos legales. La lista vigente de la SIC consultada en octubre de 2026 incluye a Estados Unidos entre los países con nivel adecuado; aun así, se deben verificar país, entidad contratante y flujos reales y aplicar responsabilidad demostrada. Si se activa una pasarela de pagos, se identificará antes de usarla; los datos completos de tarjeta serán gestionados por esa pasarela y no se almacenarán en BIMetrics.
 
 Las páginas ya no cargan Google Fonts ni otros recursos tipográficos remotos; usan fuentes de sistema locales.
 
