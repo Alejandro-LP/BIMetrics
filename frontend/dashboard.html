@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f6fb">
+  <title>ObraPresupuesto · Control de obra</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/site.css?v=3d-building-20261015">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="ObraPresupuesto, inicio"><span class="brand-mark">O<span>.</span></span><span>obra<span class="brand-light">presupuesto</span></span></a>
+    <p class="nav-label">ESPACIO DE TRABAJO</p>
+    <nav aria-label="Principal">
+      <a class="nav-link active" href="#inicio"><span class="nav-icon">▦</span>Resumen</a>
+      <a class="nav-link" href="#proyecto"><span class="nav-icon">▤</span>Proyectos</a>
+      <a class="nav-link" href="#presupuesto"><span class="nav-icon">▧</span>Presupuestos</a>
+    </nav>
+    <div class="sidebar-note"><span class="note-dot"></span><div><strong>Moneda de referencia</strong><small>COP · Ajusta precios a tu región</small></div></div>
+    <div class="profile"><span class="avatar" id="user-avatar">OP</span><div><strong id="user-name">ObraPresupuesto</strong><small id="user-role">Gestión de costos</small></div></div>
+  </aside>
+
+  <main class="content" id="inicio">
+    <header class="topbar"><div class="breadcrumb">INICIO <span>/</span> <strong>RESUMEN</strong></div><div class="topbar-right"><span class="live-dot"></span><span id="connection-label">Conectando con la API</span><button class="icon-button" id="refresh" aria-label="Actualizar datos" title="Actualizar">↻</button><a class="topbar-link" href="/perfil">Mi perfil</a><button class="icon-button" id="logout" aria-label="Cerrar sesión" title="Cerrar sesión">↪</button></div></header>
+    <section class="intro" id="proyecto">
+      <div class="intro-copy-block">
+        <p class="eyebrow" id="role-eyebrow">PANEL DE CONTROL <span id="today"></span></p>
+        <h1><span id="role-title">Costos claros.</span><br><em id="role-title-accent">Obras bajo control.</em></h1>
+        <p class="intro-copy" id="role-description">Consulta tus proyectos y revisa cada partida de presupuesto en un solo lugar.</p>
+      </div>
+      <figure class="construction-scene" aria-label="Modelo tridimensional de un edificio en construcci&oacute;n">
+        <div class="scene-glow"></div>
+        <svg class="building-model" viewBox="0 0 260 250" role="img" aria-hidden="true">
+          <defs>
+            <linearGradient id="facade-front" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#90a9ca"/><stop offset="1" stop-color="#435b7d"/></linearGradient>
+            <linearGradient id="facade-side" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#3a4c67"/><stop offset="1" stop-color="#202b3b"/></linearGradient>
+            <linearGradient id="facade-roof" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d2dceb"/><stop offset="1" stop-color="#7187a6"/></linearGradient>
+            <linearGradient id="window-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d2e3f5" stop-opacity=".78"/><stop offset="1" stop-color="#718daf" stop-opacity=".38"/></linearGradient>
+            <filter id="building-shadow" x="-40%" y="-30%" width="180%" height="180%"><feGaussianBlur stdDeviation="8"/></filter>
+          </defs>
+          <ellipse cx="132" cy="218" rx="78" ry="15" fill="#000" opacity=".42" filter="url(#building-shadow)"/>
+          <g stroke="#c7d5e8" stroke-opacity=".65" stroke-width="1.2" stroke-linejoin="round">
+            <path d="M57 74 137 30 205 66 126 111Z" fill="url(#facade-roof)"/>
+            <path d="M57 74 126 111 126 211 57 174Z" fill="url(#facade-front)"/>
+            <path d="M126 111 205 66 205 166 126 211Z" fill="url(#facade-side)"/>
+          </g>
+          <g fill="url(#window-glass)" stroke="#d2deee" stroke-opacity=".44" stroke-width="1">
+            <path d="m68 85 15 8v17l-15-8Z"/><path d="m94 99 15 8v17l-15-8Z"/><path d="m68 119 15 8v17l-15-8Z"/><path d="m94 133 15 8v17l-15-8Z"/><path d="m68 153 15 8v17l-15-8Z"/><path d="m94 167 15 8v17l-15-8Z"/>
+            <path d="m143 114 18-10v18l-18 10Z"/><path d="m174 96 18-10v18l-18 10Z"/><path d="m143 146 18-10v18l-18 10Z"/><path d="m174 128 18-10v18l-18 10Z"/><path d="m143 178 18-10v18l-18 10Z"/><path d="m174 160 18-10v18l-18 10Z"/>
+          </g>
+          <g fill="none" stroke="#d5dfed" stroke-opacity=".35" stroke-width="1">
+            <path d="m57 107 69 37 79-45M57 140l69 37 79-45M126 111v100M57 74v100M205 66v100"/>
+            <path d="m47 181 79 43 89-51" stroke="#bd9879" stroke-opacity=".8" stroke-width="2"/>
+          </g>
+          <path d="m137 30 68 36-79 45-69-37Z" fill="none" stroke="#eef3fa" stroke-opacity=".7" stroke-width="1.4"/>
+        </svg>
+        <span class="scene-tag scene-tag-top">MODELO ESTRUCTURAL <b>3D</b></span>
+      </figure>
+      <div class="project-picker">
+        <label id="project-label" for="project-select">PROYECTO ACTIVO</label>
+        <select id="project-select"><option value="">Cargando proyectos&#8230;</option></select>
+        <span class="picker-caption" id="client-label">Selecciona un proyecto para ver su presupuesto</span>
+        <div class="project-actions">
+          <button class="button button-primary" id="new-project">+ Iniciar proyecto</button>
+          <button class="button button-quiet" id="invite-collaborator" type="button" hidden>+ Invitar arquitecto o ingeniero</button>
+          <button class="button button-danger" id="delete-project" type="button">Eliminar proyecto</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="project-summary" aria-label="Proyecto seleccionado">
+      <div class="project-summary-icon" aria-hidden="true">OP</div>
+      <div class="project-summary-copy"><span class="summary-kicker">PROYECTO ACTIVO</span><h2 id="current-project-name">Selecciona un proyecto</h2><div class="project-tags"><span id="current-project-city">Ciudad pendiente</span><span id="current-project-client">Cliente no indicado</span></div></div>
+      <div class="project-summary-divider"></div>
+      <div class="project-summary-meta"><span>RESPONSABLE</span><strong id="current-project-owner">?</strong></div>
+    </section>
+
+    <section class="stats" aria-label="Resumen financiero de la obra">
+      <article class="stat-card stat-total"><span class="stat-label" id="total-label">COSTO TOTAL</span><span class="stat-value" id="total">?</span><span class="stat-foot"><span class="accent-dot"></span><span id="budget-title">Elige un presupuesto</span></span></article>
+      <article class="stat-card"><span class="stat-label">MATERIALES Y OTROS</span><span class="stat-value" id="materials-total">-</span><span class="stat-foot">Según partidas del presupuesto</span></article>
+      <article class="stat-card"><span class="stat-label">MANO DE OBRA</span><span class="stat-value" id="labor-total">-</span><span class="stat-foot">Según partidas del presupuesto</span></article>
+      <article class="stat-card"><span class="stat-label">PARTIDAS / FECHA</span><span class="stat-value stat-date"><span id="line-count">-</span><span class="stat-date-divider">/</span><span id="budget-date">-</span></span><span class="stat-foot">Cantidad y fecha de cálculo</span></article>
+    </section>
+
+    <section class="cost-overview" aria-labelledby="cost-overview-title">
+      <div class="cost-overview-heading"><div><p class="eyebrow">LECTURA DEL PRESUPUESTO</p><h2 id="cost-overview-title">Distribución por categoría</h2></div><span class="chart-caption">COP · valores del cálculo seleccionado</span></div>
+      <div class="cost-chart-content"><div class="cost-donut" id="cost-donut" role="img" aria-label="Distribución de costos entre materiales y mano de obra"><div class="cost-donut-center"><span>PARTIDAS</span><strong id="chart-count">-</strong></div></div><div class="cost-legend"><div class="cost-legend-row"><span class="legend-swatch materials-swatch"></span><div><strong>Materiales y otros</strong><small id="materials-share">- del total</small></div><b id="materials-chart-total">-</b></div><div class="cost-legend-row"><span class="legend-swatch labor-swatch"></span><div><strong>Mano de obra</strong><small id="labor-share">- del total</small></div><b id="labor-chart-total">-</b></div><p class="chart-note">Agrupación estimada por nombre y unidad del insumo; revisa las partidas antes de tomar decisiones.</p></div></div>
+    </section>
+
+    <section class="workspace" id="presupuesto">
+      <div class="section-heading"><div><p class="eyebrow" id="detail-eyebrow">DETALLE DE COSTOS</p><h2 id="detail-title">Desglose del presupuesto</h2></div><div class="budget-control"><label for="budget-select">PRESUPUESTO</label><select id="budget-select" disabled><option>Selecciona un proyecto</option></select></div></div>
+      <div class="toolbar"><p id="table-caption">Selecciona un proyecto para consultar sus partidas.</p><div class="toolbar-actions"><button class="button button-primary" id="add-line" disabled>+ Agregar insumo</button><button class="button button-quiet" id="duplicate" disabled>↗ <span>Duplicar</span></button><button class="button button-quiet" id="print">↓ <span>Imprimir / PDF</span></button><button class="button button-primary" id="recalculate" disabled><span>↻</span> Recalcular</button></div></div>
+      <div class="table-shell"><div class="table-scroll"><table><thead><tr><th>INSUMO</th><th>UNIDAD</th><th class="numeric">CANTIDAD</th><th class="numeric">PRECIO UNITARIO</th><th class="numeric">SUBTOTAL</th><th></th></tr></thead><tbody id="lines"><tr><td colspan="6" class="empty">Conecta con la API para ver los datos del proyecto.</td></tr></tbody><tfoot><tr><td colspan="4">Total del presupuesto <small>Valores expresados en pesos colombianos</small></td><td class="numeric" id="table-total">—</td><td></td></tr></tfoot></table></div></div>
+      <footer class="workspace-foot"><span><span class="foot-mark">i</span> Los precios aplicados quedan guardados al crear cada presupuesto.</span><span id="api-hint">API local · 127.0.0.1:5000</span><a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a></footer>
+    </section>
+    <footer class="page-foot">OBRAPRESUPUESTO <span>·</span> HERRAMIENTA DE CONTROL DE OBRA<a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a></footer>
+    <dialog class="line-dialog" id="add-dialog" aria-labelledby="add-title"><form id="add-form"><div class="dialog-heading"><div><p class="eyebrow">NUEVA PARTIDA</p><h2 id="add-title">Agregar insumo</h2></div><button class="dialog-close" id="close-add" type="button" aria-label="Cerrar">×</button></div><label for="insumo-select">Insumo del cat&aacute;logo</label><select id="insumo-select" required><option value="">Selecciona un insumo</option></select><button class="button button-quiet" id="new-item-toggle" type="button">+ Crear un insumo para esta ciudad</button><div id="new-item-fields" hidden><label for="new-item-name">Nombre del insumo</label><input id="new-item-name" maxlength="150" placeholder="Ej. Arena lavada"><label for="new-item-unit">Unidad</label><input id="new-item-unit" maxlength="30" placeholder="Ej. m³"><label for="new-item-price">Precio unitario en <span id="item-city-label"></span> (COP)</label><input id="new-item-price" type="number" min="0.01" step="0.01" placeholder="Precio local" /><p class="dialog-hint">Si escribes el nombre de un insumo ya existente, se actualizará su precio para esta ciudad; si es nuevo, se añadirá al catálogo.</p></div><p id="price-city-note" class="dialog-hint"></p><label for="quantity-input">Cantidad</label><input id="quantity-input" type="number" min="0.001" step="any" placeholder="Ej. 2.5" required><p class="dialog-hint">El presupuesto guardar&aacute; el precio vigente del cat&aacute;logo.</p><div class="dialog-actions"><button class="button button-quiet" id="cancel-add" type="button">Cancelar</button><button class="button button-primary" id="save-line" type="submit">Agregar al presupuesto</button></div></form></dialog>
+    <dialog class="line-dialog" id="project-dialog" aria-labelledby="project-dialog-title"><form id="project-form"><div class="dialog-heading"><div><p class="eyebrow">NUEVA OBRA</p><h2 id="project-dialog-title">Iniciar proyecto</h2></div><button class="dialog-close" id="close-project" type="button" aria-label="Cerrar">×</button></div><label for="project-name">Nombre del proyecto</label><input id="project-name" maxlength="150" placeholder="Ej. Casa en Chapinero" required><label for="project-city">Ciudad del proyecto</label><select id="project-city" required><option value="Bogotá">Bogotá</option><option>Medellín</option><option>Cali</option><option>Barranquilla</option><option>Cartagena</option><option>Bucaramanga</option><option>Pereira</option><option>Manizales</option><option>Armenia</option><option>Ibagué</option><option>Pasto</option><option>Cúcuta</option><option>Villavicencio</option><option>Neiva</option><option>Montería</option><option>Santa Marta</option><option>Sincelejo</option><option>Popayán</option><option>Valledupar</option><option>Tunja</option><option>Riohacha</option><option>Quibdó</option><option>Yopal</option><option>Florencia</option><option>Mocoa</option><option>Arauca</option><option>San José del Guaviare</option><option>Leticia</option><option>Mitú</option><option>Puerto Carreño</option><option>San Andrés</option></select><label for="project-client">Cliente (opcional)</label><input id="project-client" maxlength="150" placeholder="Nombre del cliente"><div class="dialog-actions"><button class="button button-quiet" id="cancel-project" type="button">Cancelar</button><button class="button button-primary" type="submit">Crear proyecto</button></div></form></dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+  <script src="js/script.js"></script>
+</body>
+</html>
+

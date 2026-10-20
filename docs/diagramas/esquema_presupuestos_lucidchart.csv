@@ -1,0 +1,22 @@
+dbms,TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,ORDINAL_POSITION,DATA_TYPE,CHARACTER_MAXIMUM_LENGTH,CONSTRAINT_TYPE,REFERENCED_TABLE_SCHEMA,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME
+mysql,presupuestos_db,USUARIOS,id_usuario,1,int,,PRIMARY KEY,,,
+mysql,presupuestos_db,USUARIOS,nombre_completo,2,varchar,150,,,,
+mysql,presupuestos_db,USUARIOS,email,3,varchar,150,,,,
+mysql,presupuestos_db,USUARIOS,rol,4,varchar,50,,,,
+mysql,presupuestos_db,PROYECTOS,id_proyecto,1,int,,PRIMARY KEY,,,
+mysql,presupuestos_db,PROYECTOS,id_usuario,2,int,,FOREIGN KEY,presupuestos_db,USUARIOS,id_usuario
+mysql,presupuestos_db,PROYECTOS,nombre_obra,3,varchar,150,,,,
+mysql,presupuestos_db,PROYECTOS,cliente,4,varchar,150,,,,
+mysql,presupuestos_db,PRESUPUESTOS,id_presupuesto,1,int,,PRIMARY KEY,,,
+mysql,presupuestos_db,PRESUPUESTOS,id_proyecto,2,int,,FOREIGN KEY,presupuestos_db,PROYECTOS,id_proyecto
+mysql,presupuestos_db,PRESUPUESTOS,fecha_calculo,3,date,,,,,
+mysql,presupuestos_db,PRESUPUESTOS,costo_total,4,decimal,,,,,
+mysql,presupuestos_db,INSUMOS,id_insumo,1,int,,PRIMARY KEY,,,
+mysql,presupuestos_db,INSUMOS,nombre_insumo,2,varchar,150,,,,
+mysql,presupuestos_db,INSUMOS,unidad_medida,3,varchar,20,,,,
+mysql,presupuestos_db,INSUMOS,costo_unitario,4,decimal,,,,,
+mysql,presupuestos_db,DETALLE_PRESUPUESTO,id_detalle,1,int,,PRIMARY KEY,,,
+mysql,presupuestos_db,DETALLE_PRESUPUESTO,id_presupuesto,2,int,,FOREIGN KEY,presupuestos_db,PRESUPUESTOS,id_presupuesto
+mysql,presupuestos_db,DETALLE_PRESUPUESTO,id_insumo,3,int,,FOREIGN KEY,presupuestos_db,INSUMOS,id_insumo
+mysql,presupuestos_db,DETALLE_PRESUPUESTO,cantidad,4,decimal,,,,,
+mysql,presupuestos_db,DETALLE_PRESUPUESTO,costo_unitario_aplicado,5,decimal,,,,,
