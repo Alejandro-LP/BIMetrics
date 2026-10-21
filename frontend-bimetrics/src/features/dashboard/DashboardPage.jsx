@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Activity, ArrowUpRight, Boxes, Building2, CircleAlert, Clock3, DollarSign } from 'lucide-react'
 import DashboardLayout from '../../components/layout/DashboardLayout.jsx'
 import GlassCard from '../../components/ui/GlassCard.jsx'
 import { API_BASE_URL, apiRequest } from '../../services/api.js'
@@ -34,7 +33,6 @@ function DashboardPage() {
     async function loadSummary() {
       setIsLoading(true)
       setError('')
-
       try {
         const payload = await apiRequest('/dashboard/resumen', { signal: controller.signal })
         setSummary(payload.resumen)
@@ -56,22 +54,16 @@ function DashboardPage() {
       label: 'Presupuesto vigente',
       value: formatCurrency(summary.presupuesto_total),
       detail: 'Suma del último presupuesto de cada proyecto',
-      icon: DollarSign,
-      accent: 'text-emerald-300 bg-emerald-400/10 ring-emerald-300/15',
     },
     {
       label: 'Proyectos',
       value: summary.total_proyectos.toLocaleString('es-CO'),
       detail: 'Proyectos propios y compartidos',
-      icon: Building2,
-      accent: 'text-indigo-300 bg-indigo-400/10 ring-indigo-300/15',
     },
     {
       label: 'Insumos disponibles',
       value: summary.total_insumos.toLocaleString('es-CO'),
       detail: 'Elementos del catálogo de costos',
-      icon: Boxes,
-      accent: 'text-cyan-300 bg-cyan-400/10 ring-cyan-300/15',
     },
   ] : []
 
@@ -81,44 +73,36 @@ function DashboardPage() {
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="mb-2 text-sm font-medium text-indigo-300">Resumen general</p>
-            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              Dashboard BIM 5D
-            </h1>
-            <p className="mt-2 text-sm text-slate-400">
-              Proyectos, presupuestos y actividad BIM de tu espacio de trabajo.
-            </p>
+            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Dashboard BIM 5D</h1>
+            <p className="mt-2 text-sm text-slate-400">Proyectos, presupuestos y actividad BIM de tu espacio de trabajo.</p>
           </div>
           <button
             type="button"
             onClick={() => setReloadKey((key) => key + 1)}
             disabled={isLoading}
-            className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 disabled:cursor-wait disabled:opacity-60"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-6 py-2 text-sm font-medium text-slate-200 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 disabled:cursor-wait disabled:opacity-60"
           >
-            
-            Actualizar
+            {isLoading ? 'Actualizando…' : 'Actualizar resumen'}
           </button>
         </div>
 
         {error && (
           <GlassCard role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 border-rose-400/20 p-5">
-            <div className="flex items-start gap-3">
-              <CircleAlert size={19} className="mt-0.5 shrink-0 text-rose-300" />
-              <div>
-                <p className="font-medium text-rose-200">No se pudo cargar el dashboard</p>
-                <p className="mt-1 text-sm text-slate-400">{error}</p>
-              </div>
+            <div>
+              <p className="font-medium text-rose-200">No se pudo cargar el dashboard</p>
+              <p className="mt-1 text-sm text-slate-400">{error}</p>
             </div>
             <button
               type="button"
               onClick={() => setReloadKey((key) => key + 1)}
-              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:bg-white/[0.06]"
+              className="rounded-lg border border-white/10 px-6 py-2 text-sm text-slate-200 transition hover:bg-white/[0.06]"
             >
               Reintentar
             </button>
           </GlassCard>
         )}
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {isLoading && !summary
             ? [0, 1, 2].map((item) => (
               <GlassCard key={item} className="h-40 animate-pulse p-6" aria-label="Cargando métrica">
@@ -127,71 +111,58 @@ function DashboardPage() {
                 <div className="mt-3 h-3 w-48 rounded bg-white/[0.06]" />
               </GlassCard>
             ))
-            : metrics.map(({ label, value, detail, icon: Icon, accent }, index) => (
-              <GlassCard key={label} className="p-6" transition={{ delay: index * 0.1 }}>
-                <div className="mb-7 flex items-start justify-between gap-3">
-                  <p className="text-sm font-medium text-slate-400">{label}</p>
-                  <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${accent}`}>
-                    <Icon size={19} strokeWidth={1.8} />
-                  </span>
-                </div>
-                <p className="break-words text-3xl font-semibold tracking-tight text-white">{value}</p>
+            : metrics.map(({ label, value, detail }) => (
+              <GlassCard key={label} className="p-6">
+                <p className="text-sm font-medium text-slate-400">{label}</p>
+                <p className="mt-6 break-words text-3xl font-semibold tracking-tight text-white">{value}</p>
                 <p className="mt-2 text-xs text-slate-500">{detail}</p>
               </GlassCard>
             ))}
         </div>
 
-        <GlassCard className="mt-6 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300 ring-1 ring-cyan-300/15" aria-hidden="true">
-                {summary?.ultima_actividad_bim ? <Activity size={19} /> : <Clock3 size={19} />}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-white">Última actividad BIM</p>
-                {summary?.ultima_actividad_bim ? (
-                  <>
-                    <p className="mt-1 text-sm text-slate-300">
-                      {summary.ultima_actividad_bim.nombre_archivo || summary.ultima_actividad_bim.tipo_evento}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {summary.ultima_actividad_bim.software_origen || 'Origen no especificado'}
-                      {' · '}{formatDate(summary.ultima_actividad_bim.fecha_registro)}
-                    </p>
-                  </>
-                ) : (
-                  <p className="mt-1 text-sm text-slate-500">
-                    {summary?.mongodb_disponible === false
-                      ? 'MongoDB no está disponible; las métricas SQL siguen activas.'
-                      : 'Todavía no hay importaciones BIM registradas.'}
+        <GlassCard className="mt-5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-white">Última actividad BIM</p>
+              {summary?.ultima_actividad_bim ? (
+                <>
+                  <p className="mt-2 text-sm text-slate-300">
+                    {summary.ultima_actividad_bim.nombre_archivo || summary.ultima_actividad_bim.tipo_evento}
                   </p>
-                )}
-              </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {summary.ultima_actividad_bim.software_origen || 'Origen no especificado'} ·{' '}
+                    {formatDate(summary.ultima_actividad_bim.fecha_registro)}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">
+                  {summary?.mongodb_disponible === false
+                    ? 'MongoDB no está disponible; las métricas SQL siguen activas.'
+                    : 'Todavía no hay importaciones BIM registradas.'}
+                </p>
+              )}
             </div>
-            <span className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-medium ${
+            <span className={`rounded-full border px-3 py-1 text-xs font-medium ${
               error
                 ? 'border-rose-400/20 bg-rose-400/10 text-rose-300'
                 : summary
                   ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
                   : 'border-indigo-400/20 bg-indigo-400/10 text-indigo-300'
             }`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                error ? 'bg-rose-300' : summary ? 'bg-emerald-300' : 'bg-indigo-300'
-              }`} />
-              {error ? 'API no disponible' : summary ? 'API conectada' : 'Conectando'}
+              {error ? 'API no disponible' : summary ? 'API conectada' : 'Conectando con la API'}
             </span>
           </div>
           <a
             href={`${API_BASE_URL}/salud`}
             target="_blank"
             rel="noreferrer"
-            className="mt-5 inline-flex items-center gap-1 text-xs text-indigo-300 transition hover:text-indigo-200"
+            className="mt-5 inline-flex text-xs text-indigo-300 transition hover:text-indigo-200"
           >
-            Estado del servicio <ArrowUpRight size={13} />
+            Consultar estado del servicio
           </a>
         </GlassCard>
 
-        <div className="mt-8">
+        <div className="mt-6">
           <ProjectBudgetWorkspace user={user} search={search} />
         </div>
       </section>

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Boxes, RotateCw } from 'lucide-react'
 import { motion } from 'framer-motion'
 import GlassCard from '../../components/ui/GlassCard.jsx'
 import { API_BASE_URL, apiRequest } from '../../services/api.js'
@@ -385,14 +384,53 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
 
       <section className="grid gap-6 xl:grid-cols-2">
         <GlassCard id="catalog" className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/[0.08] p-5"><div><p className="text-sm font-semibold text-white">Catálogo de insumos</p><p className="mt-1 text-xs text-slate-500">Precios aplicables a {project?.ciudad || 'la ciudad seleccionada'}</p></div><Boxes size={18} className="text-indigo-300" /></div>
-          {catalogLoading ? <p className="p-6 text-sm text-slate-500">Cargando catálogo…</p> : <div className="max-h-[360px] overflow-auto"><table className="w-full min-w-[440px] text-left text-xs"><thead className="sticky top-0 bg-[#11151e] text-[10px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-5 py-3 font-semibold">Insumo</th><th className="px-3 py-3 font-semibold">Unidad</th><th className="px-5 py-3 text-right font-semibold">Precio</th></tr></thead><tbody className="divide-y divide-white/[0.06]">{filteredCatalog.map((item) => <tr key={item.id_insumo}><td className="px-5 py-3 text-slate-200">{item.nombre_insumo}</td><td className="px-3 py-3 text-slate-500">{item.unidad_medida}</td><td className="px-5 py-3 text-right tabular-nums text-slate-300">{Number(item.costo_unitario) > 0 ? currency.format(Number(item.costo_unitario)) : <span className="text-amber-300">Sin precio</span>}</td></tr>)}{!filteredCatalog.length && <tr><td colSpan="3" className="px-5 py-8 text-center text-slate-500">{catalog.length ? 'No hay insumos que coincidan con la búsqueda.' : 'El catálogo está vacío para esta ciudad.'}</td></tr>}</tbody></table></div>}
+          <div className="border-b border-white/[0.08] px-5 py-5 sm:px-6">
+            <p className="text-sm font-semibold text-white">Catálogo de insumos</p>
+            <p className="mt-1 text-xs text-slate-500">Precios aplicables a {project?.ciudad || 'la ciudad seleccionada'}</p>
+          </div>
+          {catalogLoading ? (
+            <div className="space-y-3 p-5" aria-label="Cargando catálogo">
+              {[0, 1, 2, 3].map((row) => <div key={row} className="h-10 animate-pulse rounded-lg bg-white/[0.045]" />)}
+            </div>
+          ) : !filteredCatalog.length ? (
+            <div className="p-4">
+              <EmptyState
+                title={catalog.length ? 'No hay insumos que coincidan' : 'El catálogo está vacío para esta ciudad'}
+                description="Consulta los precios por unidad y ciudad desde esta lista."
+                action={canEdit && budget ? 'Agregar insumo' : undefined}
+                onAction={canEdit && budget ? () => { setLineDialog(true); setNewCatalogItem(true) } : undefined}
+              />
+            </div>
+          ) : (
+            <div className="max-h-[420px] overflow-auto">
+              <table className="w-full min-w-[400px] border-separate border-spacing-0 text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-[#11151e] text-[10px] uppercase tracking-[.12em] text-slate-500">
+                  <tr>
+                    <th scope="col" className="px-5 py-3.5 font-semibold sm:px-6">Insumo</th>
+                    <th scope="col" className="px-4 py-3.5 font-semibold">Unidad</th>
+                    <th scope="col" className="px-5 py-3.5 text-right font-semibold sm:px-6">Precio unitario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCatalog.map((item) => (
+                    <tr key={item.id_insumo} className="transition-colors hover:bg-white/[0.035]">
+                      <td className="border-t border-white/[0.06] px-5 py-3.5 font-medium text-slate-200 sm:px-6">{item.nombre_insumo}</td>
+                      <td className="border-t border-white/[0.06] px-4 py-3.5 text-slate-400">{item.unidad_medida}</td>
+                      <td className="border-t border-white/[0.06] px-5 py-3.5 text-right font-medium tabular-nums text-slate-200 sm:px-6">
+                        {Number(item.costo_unitario) > 0 ? currency.format(Number(item.costo_unitario)) : <span className="font-normal text-amber-300">Sin precio</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </GlassCard>
 
         <GlassCard id="activities" className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-white/[0.08] p-5"><div><p className="text-sm font-semibold text-white">Actividad BIM reciente</p><p className="mt-1 text-xs text-slate-500">Importaciones y procesos asociados a tu cuenta</p></div><Activity size={18} className="text-cyan-300" /></div>
+          <div className="border-b border-white/[0.08] p-5"><div><p className="text-sm font-semibold text-white">Actividad BIM reciente</p><p className="mt-1 text-xs text-slate-500">Importaciones y procesos asociados a tu cuenta</p></div></div>
           {activityError ? <p className="p-6 text-sm text-rose-200">{activityError}</p> : activityLoading ? <p className="p-6 text-sm text-slate-500">Cargando actividad BIM…</p> : <div className="overflow-x-auto"><table className="w-full min-w-[430px] text-left text-xs"><thead className="bg-white/[0.02] text-[10px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-5 py-3 font-semibold">Archivo / proceso</th><th className="px-3 py-3 font-semibold">Origen</th><th className="px-5 py-3 text-right font-semibold">Estado</th></tr></thead><tbody className="divide-y divide-white/[0.06]">{filteredActivities.map((item) => <tr key={item.id}><td className="max-w-[190px] truncate px-5 py-3.5 text-slate-200" title={item.nombre_archivo}>{item.nombre_archivo || item.tipo_evento || 'Actividad BIM'}</td><td className="px-3 py-3.5 text-slate-500">{item.software_origen || '—'}</td><td className="px-5 py-3.5 text-right"><span className={`rounded-full border px-2 py-1 text-[10px] ${item.estado === 'completado' ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' : item.estado === 'advertencia' ? 'border-amber-300/20 bg-amber-300/10 text-amber-300' : 'border-rose-300/20 bg-rose-300/10 text-rose-300'}`}>{item.estado || 'completado'}</span></td></tr>)}{!filteredActivities.length && <tr><td colSpan="3" className="px-5 py-8 text-center text-slate-500">{activities.length ? 'No hay actividad que coincida con la búsqueda.' : 'Todavía no hay importaciones BIM registradas.'}</td></tr>}</tbody></table></div>}
-          <div className="flex items-center gap-2 border-t border-white/[0.06] px-5 py-3 text-[10px] text-slate-500"><RotateCw size={12} /> Historial BIM desde el almacén documental NoSQL</div>
+          <div className="border-t border-white/[0.06] px-5 py-3 text-[10px] text-slate-500">Historial BIM desde el almacén documental NoSQL</div>
         </GlassCard>
       </section>
 
