@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Archive, Boxes, Download, Plus, RefreshCw, RotateCw, Trash2, UserRoundPlus } from 'lucide-react'
+import { Activity, Boxes, RotateCw } from 'lucide-react'
 import { motion } from 'framer-motion'
 import GlassCard from '../../components/ui/GlassCard.jsx'
 import { API_BASE_URL, apiRequest } from '../../services/api.js'
+import EmptyState from '../../components/ui/EmptyState.jsx'
+import { toast } from 'sonner'
 
 const currency = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const quantityFormat = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 3 })
@@ -137,6 +139,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
   useEffect(() => () => window.clearTimeout(noticeTimerRef.current), [])
 
   function announce(message) {
+    toast.success(message)
     setNotice(message)
     window.clearTimeout(noticeTimerRef.current)
     noticeTimerRef.current = window.setTimeout(() => setNotice(''), 3500)
@@ -169,7 +172,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setProjectForm({ nombre_obra: '', ciudad: 'Bogotá', cliente: '' })
       await reloadProjects(created.id_proyecto)
       announce('Proyecto creado. Puedes generar su presupuesto.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
 
@@ -187,7 +190,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setCatalogLoading(false)
       setSelectedProjectId(remaining.length ? String(remaining[0].id_proyecto) : '')
       announce('Proyecto y presupuestos eliminados.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
 
@@ -203,7 +206,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setSelectedBudgetId(String(created.id_presupuesto))
       setBudget(created)
       announce('Presupuesto creado.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
 
@@ -216,7 +219,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
         method: 'POST', body: JSON.stringify({ email: email.trim() }),
       })
       announce(result.mensaje || 'Colaborador agregado al proyecto.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
   }
 
   async function createLine(event) {
@@ -247,7 +250,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setNewItemForm({ nombre_insumo: '', unidad_medida: '', costo_unitario: '' })
       setNewCatalogItem(false)
       announce('Insumo agregado al presupuesto.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
 
@@ -258,7 +261,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setBudget(updated)
       setBudgets((items) => items.map((item) => item.id_presupuesto === updated.id_presupuesto ? updated : item))
       announce('Partida eliminada del presupuesto.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
   }
 
   async function recalculate() {
@@ -270,7 +273,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setBudget(updated)
       setBudgets((items) => items.map((item) => item.id_presupuesto === updated.id_presupuesto ? updated : item))
       announce('Presupuesto recalculado correctamente.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
 
@@ -283,7 +286,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setSelectedBudgetId(String(copy.id_presupuesto))
       setBudget(copy)
       announce('Copia creada con los precios vigentes del catálogo.')
-    } catch (actionError) { setError(actionError.message) }
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
 
@@ -315,16 +318,16 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
 
   return (
     <div className="space-y-6">
-      {error && <div role="alert" className="flex items-start justify-between gap-4 rounded-xl border border-rose-400/20 bg-rose-400/[0.07] px-4 py-3 text-sm text-rose-200"><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Cerrar aviso">×</button></div>}
+      {error && <div role="alert" className="flex items-start justify-between gap-4 rounded-xl border border-rose-400/20 bg-rose-400/[0.07] px-4 py-3 text-sm text-rose-200"><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Cerrar aviso">Cerrar</button></div>}
       {notice && <div role="status" className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.07] px-4 py-3 text-sm text-emerald-200">{notice}</div>}
 
       <GlassCard id="projects" className="p-5 sm:p-6">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
           <div><p className="text-sm font-semibold text-white">Proyectos y presupuestos</p><p className="mt-1 text-xs text-slate-500">Selecciona una obra para consultar o actualizar su presupuesto.</p></div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setProjectDialog(true)} disabled={!isEditor} className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-40"><Plus size={15} /> Nuevo proyecto</button>
-            {isOwner && isEditor && <button type="button" onClick={inviteCollaborator} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"><UserRoundPlus size={14} /> Invitar</button>}
-            {isOwner && isEditor && <button type="button" onClick={deleteProject} disabled={busyAction === 'delete-project'} aria-label="Eliminar proyecto" className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:border-rose-400/20 hover:text-rose-300"><Trash2 size={14} /></button>}
+            <button type="button" onClick={() => setProjectDialog(true)} disabled={!isEditor} className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-40"> Nuevo proyecto</button>
+            {isOwner && isEditor && <button type="button" onClick={inviteCollaborator} className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"> Invitar</button>}
+            {isOwner && isEditor && <button type="button" onClick={deleteProject} disabled={busyAction === 'delete-project'} aria-label="Eliminar proyecto" className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-400 transition hover:border-rose-400/20 hover:text-rose-300"></button>}
           </div>
         </div>
         {projectLoading ? <p className="py-6 text-sm text-slate-500">Cargando proyectos…</p> : projects.length ? (
@@ -339,17 +342,17 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
               {canEdit && <button type="button" onClick={createBudget} disabled={busyAction === 'create-budget'} className="mb-0.5 shrink-0 rounded-xl border border-white/10 px-3 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05]">Nuevo</button>}
             </div>
           </div>
-        ) : <div className="rounded-xl border border-dashed border-white/10 p-7 text-center"><p className="text-sm text-slate-300">Todavía no hay proyectos.</p><p className="mt-1 text-xs text-slate-500">Crea una obra para empezar a presupuestar.</p></div>}
+        ) : <EmptyState title="Todav?a no hay proyectos" description="Crea una obra para organizar sus presupuestos y actividad BIM." action="Crear proyecto" onAction={() => setProjectDialog(true)} />}
       </GlassCard>
 
       {project && <GlassCard className="p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Obra en desarrollo</p><h2 className="mt-2 text-xl font-semibold text-white">{project.nombre_obra}</h2><p className="mt-1 text-sm text-slate-400">{[project.ciudad, project.cliente, project.responsable].filter(Boolean).join(' · ')}</p></div>
           <div className="flex flex-wrap gap-2">
-            {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} onClick={() => { setLineDialog(true); setNewCatalogItem(false) }} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"><Plus size={15} /> Agregar partida</button>}
-            <button type="button" disabled={!budget || Boolean(busyAction)} onClick={recalculate} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"><RefreshCw size={14} className={busyAction === 'recalculate' ? 'animate-spin' : ''} /> Recalcular</button>
-            {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} onClick={duplicateBudget} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"><Archive size={14} /> Duplicar</button>}
-            <button type="button" disabled={!budget || Boolean(busyAction)} onClick={exportExcel} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"><Download size={14} /> Excel</button>
+            {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} onClick={() => { setLineDialog(true); setNewCatalogItem(false) }} className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"> Agregar partida</button>}
+            <button type="button" disabled={!budget || Boolean(busyAction)} onClick={recalculate} className="inline-flex items-center justify-center rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"> Recalcular</button>
+            {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} onClick={duplicateBudget} className="inline-flex items-center justify-center rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"> Duplicar</button>}
+            <button type="button" disabled={!budget || Boolean(busyAction)} onClick={exportExcel} className="inline-flex items-center justify-center rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"> Excel</button>
           </div>
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -372,7 +375,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
           <table className="w-full min-w-[760px] text-left text-xs">
             <thead className="bg-white/[0.025] text-[10px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-5 py-3 font-semibold sm:px-6">Insumo</th><th className="px-3 py-3 font-semibold">Unidad</th><th className="px-3 py-3 text-right font-semibold">Cantidad</th><th className="px-3 py-3 text-right font-semibold">Costo unitario</th><th className="px-3 py-3 text-right font-semibold">Subtotal</th><th className="px-4 py-3" /></tr></thead>
             <tbody className="divide-y divide-white/[0.06]">
-              {filteredLines.map((line) => <tr key={line.id_detalle} className="text-slate-300 transition hover:bg-white/[0.02]"><td className="max-w-[260px] truncate px-5 py-3.5 font-medium text-slate-200 sm:px-6">{line.nombre_insumo}</td><td className="px-3 py-3.5 text-slate-500">{line.unidad_medida}</td><td className="px-3 py-3.5 text-right tabular-nums">{quantityFormat.format(Number(line.cantidad))}</td><td className="px-3 py-3.5 text-right tabular-nums">{currency.format(Number(line.costo_unitario_aplicado))}</td><td className="px-3 py-3.5 text-right font-medium tabular-nums text-white">{currency.format(Number(line.subtotal) || Number(line.cantidad) * Number(line.costo_unitario_aplicado))}</td><td className="px-4 py-3.5 text-right">{canEdit && <button type="button" onClick={() => removeLine(line)} aria-label={`Quitar ${line.nombre_insumo}`} className="rounded-md px-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-300">×</button>}</td></tr>)}
+              {filteredLines.map((line) => <tr key={line.id_detalle} className="text-slate-300 transition hover:bg-white/[0.02]"><td className="max-w-[260px] truncate px-5 py-3.5 font-medium text-slate-200 sm:px-6">{line.nombre_insumo}</td><td className="px-3 py-3.5 text-slate-500">{line.unidad_medida}</td><td className="px-3 py-3.5 text-right tabular-nums">{quantityFormat.format(Number(line.cantidad))}</td><td className="px-3 py-3.5 text-right tabular-nums">{currency.format(Number(line.costo_unitario_aplicado))}</td><td className="px-3 py-3.5 text-right font-medium tabular-nums text-white">{currency.format(Number(line.subtotal) || Number(line.cantidad) * Number(line.costo_unitario_aplicado))}</td><td className="px-4 py-3.5 text-right">{canEdit && <button type="button" onClick={() => removeLine(line)} aria-label={`Quitar ${line.nombre_insumo}`} className="rounded-md px-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-300">Quitar</button>}</td></tr>)}
               {(!filteredLines.length) && <tr><td colSpan="6" className="px-6 py-10 text-center text-slate-500">{budget ? query ? 'No hay partidas que coincidan con la búsqueda.' : 'Este presupuesto todavía no tiene partidas.' : project ? budgets.length ? 'Selecciona un presupuesto.' : 'Este proyecto no tiene presupuestos. Crea uno para comenzar.' : 'Selecciona o crea un proyecto para consultar el presupuesto.'}</td></tr>}
             </tbody>
             {budget && <tfoot><tr className="border-t border-white/10 bg-white/[0.02]"><td colSpan="4" className="px-5 py-4 text-right font-semibold text-slate-300 sm:px-6">Total del presupuesto</td><td className="px-3 py-4 text-right text-sm font-semibold text-white">{currency.format(Number(budget.costo_total) || 0)}</td><td /></tr></tfoot>}
@@ -397,7 +400,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
 
       {lineDialog && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLineDialog(false) }}><motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg"><GlassCard role="dialog" aria-modal="true" aria-labelledby="add-line-title" className="p-6 sm:p-7"><div className="mb-5 flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Nueva partida</p><h2 id="add-line-title" className="mt-1 text-xl font-semibold text-white">Agregar insumo</h2></div><button type="button" onClick={() => setLineDialog(false)} className="text-xl text-slate-500 hover:text-white" aria-label="Cerrar">×</button></div><form onSubmit={createLine} className="space-y-4">{!newCatalogItem ? <label className="block text-sm text-slate-300">Insumo del catálogo<select required value={lineForm.id_insumo} onChange={(event) => setLineForm({ ...lineForm, id_insumo: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-[#11151e] px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50"><option value="">Selecciona un insumo</option>{catalog.map((item) => <option key={item.id_insumo} value={item.id_insumo} disabled={Number(item.costo_unitario) <= 0}>{item.nombre_insumo} · {item.unidad_medida} · {Number(item.costo_unitario) > 0 ? currency.format(item.costo_unitario) : 'sin precio'}</option>)}</select></label> : <><label className="block text-sm text-slate-300">Nombre del insumo<input required maxLength={150} value={newItemForm.nombre_insumo} onChange={(event) => setNewItemForm({ ...newItemForm, nombre_insumo: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm text-slate-300">Unidad<input required maxLength={30} placeholder="Ej. kg, m³" value={newItemForm.unidad_medida} onChange={(event) => setNewItemForm({ ...newItemForm, unidad_medida: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><label className="block text-sm text-slate-300">Precio para {project?.ciudad}<input required type="number" min="0.01" step="0.01" value={newItemForm.costo_unitario} onChange={(event) => setNewItemForm({ ...newItemForm, costo_unitario: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label></div></>}
               <label className="block text-sm text-slate-300">Cantidad<input required type="number" min="0.001" step="any" value={lineForm.cantidad} onChange={(event) => setLineForm({ ...lineForm, cantidad: event.target.value })} placeholder="Ej. 2.5" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label>
-              {canEdit && <button type="button" onClick={() => { setNewCatalogItem(!newCatalogItem); setLineForm({ ...lineForm, id_insumo: '' }) }} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">{newCatalogItem ? 'Elegir del catálogo' : '+ Crear insumo con precio para esta ciudad'}</button>}
+              {canEdit && <button type="button" onClick={() => { setNewCatalogItem(!newCatalogItem); setLineForm({ ...lineForm, id_insumo: '' }) }} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">{newCatalogItem ? 'Elegir del catálogo' : 'Crear insumo con precio para esta ciudad'}</button>}
               <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4"><button type="button" onClick={() => setLineDialog(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={busyAction === 'line'} className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busyAction === 'line' ? 'Guardando…' : 'Agregar partida'}</button></div>
             </form></GlassCard></motion.div></div>}
     </div>

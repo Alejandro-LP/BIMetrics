@@ -4,14 +4,14 @@ import { Link } from 'react-router-dom'
 import BrandLogo from '../brand/BrandLogo.jsx'
 
 const navigation = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '#dashboard' },
-  { label: 'Proyectos', icon: Folder, href: '#projects' },
-  { label: 'Insumos', icon: Box, href: '#catalog' },
+  { label: 'Resumen general', icon: LayoutDashboard, href: '#dashboard' },
+  { label: 'Proyectos y presupuestos', icon: Folder, href: '#projects' },
+  { label: 'Cat?logo de insumos', icon: Box, href: '#catalog' },
   { label: 'Actividad BIM', icon: Box, href: '#activities' },
 ]
 
 function DashboardLayout({ children, user, onLogout, onSearch }) {
-  const [activeItem, setActiveItem] = useState('Dashboard')
+  const [activeItem, setActiveItem] = useState('Resumen general')
   const displayName = user?.nombre_completo || 'BIMetrics'
   const initials = displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
 
@@ -27,13 +27,13 @@ function DashboardLayout({ children, user, onLogout, onSearch }) {
       />
       <div aria-hidden="true" className="pointer-events-none fixed left-[45%] top-[42%] h-72 w-72 rounded-full bg-purple-500/[0.12] blur-[120px]" />
 
-      <aside className="glass-surface relative z-10 m-4 flex w-64 shrink-0 flex-col rounded-3xl p-5 max-md:w-20 max-md:px-3">
+      <aside className="glass-surface relative z-10 m-4 flex w-64 shrink-0 flex-col rounded-3xl p-5 max-md:w-56 max-md:px-3">
         <a href="#dashboard" className="mb-10 flex items-center px-1 max-md:justify-center" aria-label="BIMetrics inicio">
           <BrandLogo size="sm" className="max-md:[&>span]:hidden" />
         </a>
 
-        <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 max-md:hidden">
-          Workspace
+        <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+          Navegaci?n del espacio
         </p>
         <nav aria-label="Navegación principal" className="space-y-1">
           {navigation.map(({ label, icon: Icon, href }) => {
@@ -51,7 +51,7 @@ function DashboardLayout({ children, user, onLogout, onSearch }) {
                 }`}
               >
                 <Icon size={18} strokeWidth={1.8} />
-                <span className="max-md:hidden">{label}</span>
+                <span>{label}</span>
               </a>
             )
           })}
@@ -62,7 +62,7 @@ function DashboardLayout({ children, user, onLogout, onSearch }) {
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-indigo-400 to-cyan-400 text-xs font-bold text-slate-950">
               {initials}
             </div>
-            <div className="min-w-0 max-md:hidden">
+            <div className="min-w-0">
               <p className="truncate text-sm font-medium text-slate-200">{displayName}</p>
               <p className="truncate text-xs capitalize text-slate-500">{user?.rol || 'Sesión'}</p>
             </div>
@@ -87,7 +87,7 @@ function DashboardLayout({ children, user, onLogout, onSearch }) {
             <span className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-gradient-to-br from-indigo-400 to-cyan-400 text-xs font-bold text-slate-950">
               {initials}
             </span>
-            <span className="text-sm font-medium text-slate-300 max-sm:hidden">{displayName}</span>
+            <span className="text-sm font-medium text-slate-300 max-sm:hidden">Perfil: {displayName}</span>
           </Link>
           {onLogout && <button type="button" onClick={onLogout} className="rounded-lg px-2 py-2 text-xs text-slate-500 transition hover:bg-white/[0.05] hover:text-slate-200">Salir</button>}
         </header>

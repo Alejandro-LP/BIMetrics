@@ -24,7 +24,7 @@ function LandingPage() {
             <h1 className="max-w-2xl text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl xl:text-6xl">Una buena obra empieza con <span className="bg-gradient-to-r from-blue-300 to-indigo-300 bg-clip-text text-transparent">buenas cuentas.</span></h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-slate-400">Organiza insumos, cantidades y costos en un solo presupuesto. Revisa cada partida y conserva el precio aplicado al momento del cálculo.</p>
             <div className="mt-8 flex flex-wrap items-center gap-5">
-              <Link to="/registro" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-950/30 transition hover:from-blue-500 hover:to-indigo-500">Empieza tu presupuesto <ArrowRight size={16} /></Link>
+              <Link to="/registro" className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-950/30 transition hover:from-blue-500 hover:to-indigo-500">Empieza tu presupuesto <ArrowRight size={16} /></Link>
               <a href="#como-funciona" className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white">Conoce la herramienta <ArrowDown size={15} className="text-indigo-300" /></a>
             </div>
             <p className="mt-7 text-xs text-slate-500">✓ Valores en COP · Control de costos de obra</p>
@@ -70,7 +70,7 @@ function LandingPage() {
 
         <section className="mx-auto mb-16 flex max-w-7xl flex-wrap items-center justify-between gap-6 px-5 sm:px-8 lg:mb-24">
           <div><p className="mb-2 text-xs font-semibold uppercase tracking-[.2em] text-indigo-300">Empieza con un proyecto</p><h2 className="text-2xl font-bold text-white sm:text-3xl">Haz que los números cuenten una historia clara.</h2></div>
-          <Link to="/registro" className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white">Crear cuenta <ArrowRight size={16} /></Link>
+          <Link to="/registro" className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-semibold text-white">Crear cuenta <ArrowRight size={16} /></Link>
         </section>
       </main>
     </PublicLayout>

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ArrowRight, LockKeyhole } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import GlassCard from '../../components/ui/GlassCard.jsx'
@@ -50,12 +49,9 @@ function LoginPage({ mode = 'login' }) {
         </Link>
 
         <GlassCard className="p-7 sm:p-8">
-          <div className="mb-6 flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.05] text-indigo-300 ring-1 ring-white/10"><LockKeyhole size={18} /></span>
-            <div>
+          <div className="mb-6">
               <h1 className="text-lg font-semibold text-white">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</h1>
               <p className="mt-0.5 text-xs text-slate-500">{isRegister ? 'Configura tu espacio BIMetrics' : 'Ingresa con tu cuenta BIMetrics'}</p>
-            </div>
           </div>
 
           {(error || sessionError) && (
@@ -88,12 +84,11 @@ function LoginPage({ mode = 'login' }) {
             {isRegister && (
               <label className="flex items-start gap-2.5 text-xs leading-5 text-slate-400">
                 <input type="checkbox" name="autoriza_datos" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} required className="mt-1 accent-indigo-400" />
-                Autorizo el tratamiento de mis datos para crear y administrar mi cuenta BIMetrics.
+                <span>Autorizo el tratamiento de mis datos para crear y administrar mi cuenta BIMetrics. Esta autorización es necesaria para registrarme.</span>
               </label>
             )}
             <button type="submit" disabled={isLoading} className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-950/30 transition hover:from-blue-500 hover:to-indigo-500 disabled:cursor-wait disabled:opacity-60">
               {isLoading ? 'Procesando…' : isRegister ? 'Crear cuenta' : 'Entrar'}
-              {!isLoading && <ArrowRight size={16} />}
             </button>
           </form>
         </GlassCard>

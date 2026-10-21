@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import DashboardLayout from '../../components/layout/DashboardLayout.jsx'
 import GlassCard from '../../components/ui/GlassCard.jsx'
 import { useAuth } from '../auth/useAuth.js'
 import { apiRequest } from '../../services/api.js'
+import { toast } from 'sonner'
 
 const inputClass = 'glass-control mt-2 w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-indigo-300/50 focus:ring-2 focus:ring-indigo-400/15'
 
@@ -43,8 +44,10 @@ function ProfilePage() {
       setNewPassword('')
       setConfirmation('')
       setMessage({ success: 'Tus datos se actualizaron correctamente.' })
+      toast.success('Tus datos se actualizaron correctamente.')
     } catch (error) {
       setMessage({ error: error.message })
+      toast.error(error.message || 'No se pudieron guardar los cambios.')
     } finally {
       setIsLoading(false)
     }
@@ -74,7 +77,7 @@ function ProfilePage() {
                 <label className="mt-4 block text-sm text-slate-300" htmlFor="confirm-password">Confirma la nueva contraseña<input id="confirm-password" type="password" autoComplete="new-password" minLength={10} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className={inputClass} /></label>
               </div>
               {message && <p role={message.error ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${message.error ? 'border-rose-400/20 bg-rose-400/[0.07] text-rose-200' : 'border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-200'}`}>{message.error || message.success}</p>}
-              <button type="submit" disabled={isLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-blue-500 hover:to-indigo-500 disabled:opacity-60"><Save size={16} />{isLoading ? 'Guardando…' : 'Guardar cambios'}</button>
+              <button type="submit" disabled={isLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-blue-500 hover:to-indigo-500 disabled:opacity-60">{isLoading ? 'Guardando…' : 'Guardar cambios'}</button>
             </form>
           </GlassCard>
         </motion.div>

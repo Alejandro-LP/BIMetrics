@@ -7,6 +7,7 @@ import LegalPage from '../features/public/LegalPage.jsx'
 import LoginPage from '../features/auth/LoginPage.jsx'
 import ProfilePage from '../features/profile/ProfilePage.jsx'
 import ContactPage from '../features/public/ContactPage.jsx'
+import { Toaster } from 'sonner'
 
 function RouteLoader() {
   return (
@@ -48,6 +49,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Toaster position="top-right" theme="dark" richColors closeButton duration={4000} />
         <AppRoutes />
       </AuthProvider>
     </BrowserRouter>

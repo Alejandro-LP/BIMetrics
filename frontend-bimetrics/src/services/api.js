@@ -1,4 +1,14 @@
-const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '')
+const configuredApiUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '')
+// El backend publica sus endpoints bajo /api. Acepta una URL raíz en el .env
+// y agrega el prefijo automáticamente, evitando duplicarlo si ya está presente.
+const isLocalBackendUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(configuredApiUrl)
+// Local development uses Vite's /api proxy to keep session cookies same-origin.
+// Production can use an absolute API origin; normalize its /api prefix here.
+const API_BASE_URL = import.meta.env.DEV && isLocalBackendUrl
+  ? '/api'
+  : /^https?:\/\//.test(configuredApiUrl) && !configuredApiUrl.endsWith('/api')
+    ? `${configuredApiUrl}/api`
+    : configuredApiUrl
 
 export async function apiRequest(path, options = {}) {
   let response

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, ArrowUpRight, Boxes, Building2, CircleAlert, Clock3, DollarSign, RefreshCw } from 'lucide-react'
+import { Activity, ArrowUpRight, Boxes, Building2, CircleAlert, Clock3, DollarSign } from 'lucide-react'
 import DashboardLayout from '../../components/layout/DashboardLayout.jsx'
 import GlassCard from '../../components/ui/GlassCard.jsx'
 import { API_BASE_URL, apiRequest } from '../../services/api.js'
@@ -92,9 +92,9 @@ function DashboardPage() {
             type="button"
             onClick={() => setReloadKey((key) => key + 1)}
             disabled={isLoading}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-indigo-400/30 hover:bg-indigo-400/10 disabled:cursor-wait disabled:opacity-60"
           >
-            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+            
             Actualizar
           </button>
         </div>
@@ -144,7 +144,7 @@ function DashboardPage() {
         <GlassCard className="mt-6 p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300 ring-1 ring-cyan-300/15">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300 ring-1 ring-cyan-300/15" aria-hidden="true">
                 {summary?.ultima_actividad_bim ? <Activity size={19} /> : <Clock3 size={19} />}
               </span>
               <div>
@@ -168,7 +168,7 @@ function DashboardPage() {
                 )}
               </div>
             </div>
-            <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${
+            <span className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-medium ${
               error
                 ? 'border-rose-400/20 bg-rose-400/10 text-rose-300'
                 : summary
