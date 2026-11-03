@@ -1,22 +1,38 @@
 dbms,TABLE_SCHEMA,TABLE_NAME,COLUMN_NAME,ORDINAL_POSITION,DATA_TYPE,CHARACTER_MAXIMUM_LENGTH,CONSTRAINT_TYPE,REFERENCED_TABLE_SCHEMA,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME
-mysql,presupuestos_db,USUARIOS,id_usuario,1,int,,PRIMARY KEY,,,
-mysql,presupuestos_db,USUARIOS,nombre_completo,2,varchar,150,,,,
-mysql,presupuestos_db,USUARIOS,email,3,varchar,150,,,,
-mysql,presupuestos_db,USUARIOS,rol,4,varchar,50,,,,
-mysql,presupuestos_db,PROYECTOS,id_proyecto,1,int,,PRIMARY KEY,,,
-mysql,presupuestos_db,PROYECTOS,id_usuario,2,int,,FOREIGN KEY,presupuestos_db,USUARIOS,id_usuario
-mysql,presupuestos_db,PROYECTOS,nombre_obra,3,varchar,150,,,,
-mysql,presupuestos_db,PROYECTOS,cliente,4,varchar,150,,,,
-mysql,presupuestos_db,PRESUPUESTOS,id_presupuesto,1,int,,PRIMARY KEY,,,
-mysql,presupuestos_db,PRESUPUESTOS,id_proyecto,2,int,,FOREIGN KEY,presupuestos_db,PROYECTOS,id_proyecto
-mysql,presupuestos_db,PRESUPUESTOS,fecha_calculo,3,date,,,,,
-mysql,presupuestos_db,PRESUPUESTOS,costo_total,4,decimal,,,,,
-mysql,presupuestos_db,INSUMOS,id_insumo,1,int,,PRIMARY KEY,,,
-mysql,presupuestos_db,INSUMOS,nombre_insumo,2,varchar,150,,,,
-mysql,presupuestos_db,INSUMOS,unidad_medida,3,varchar,20,,,,
-mysql,presupuestos_db,INSUMOS,costo_unitario,4,decimal,,,,,
-mysql,presupuestos_db,DETALLE_PRESUPUESTO,id_detalle,1,int,,PRIMARY KEY,,,
-mysql,presupuestos_db,DETALLE_PRESUPUESTO,id_presupuesto,2,int,,FOREIGN KEY,presupuestos_db,PRESUPUESTOS,id_presupuesto
-mysql,presupuestos_db,DETALLE_PRESUPUESTO,id_insumo,3,int,,FOREIGN KEY,presupuestos_db,INSUMOS,id_insumo
-mysql,presupuestos_db,DETALLE_PRESUPUESTO,cantidad,4,decimal,,,,,
-mysql,presupuestos_db,DETALLE_PRESUPUESTO,costo_unitario_aplicado,5,decimal,,,,,
+sqlite,operational,PROYECTOS,id_proyecto,1,integer,,PRIMARY KEY,,,
+sqlite,operational,PROYECTOS,id_usuario,2,integer,,,,,
+sqlite,operational,PROYECTOS,nombre_obra,3,varchar(150),,,,,
+sqlite,operational,PROYECTOS,cliente,4,varchar(150),,,,,
+sqlite,operational,PROYECTOS,ciudad,5,varchar(100),,,,,
+sqlite,operational,PROYECTO_COLABORADORES,id_proyecto,1,integer,,"PRIMARY KEY, FOREIGN KEY",operational,PROYECTOS,id_proyecto
+sqlite,operational,PROYECTO_COLABORADORES,id_usuario,2,integer,,PRIMARY KEY,,,
+sqlite,operational,PROYECTO_COLABORADORES,invitado_por,3,integer,,,,,
+sqlite,operational,PRESUPUESTOS,id_presupuesto,1,integer,,PRIMARY KEY,,,
+sqlite,operational,PRESUPUESTOS,id_proyecto,2,integer,,FOREIGN KEY,operational,PROYECTOS,id_proyecto
+sqlite,operational,PRESUPUESTOS,fecha_calculo,3,date,,,,,
+sqlite,operational,PRESUPUESTOS,costo_total,4,"numeric(14,2)",,,,,
+sqlite,operational,INSUMOS,id_insumo,1,integer,,PRIMARY KEY,,,
+sqlite,operational,INSUMOS,nombre_insumo,2,varchar(150),,UNIQUE,,,
+sqlite,operational,INSUMOS,unidad_medida,3,varchar(30),,,,,
+sqlite,operational,INSUMOS,costo_unitario,4,"numeric(14,2)",,,,,
+sqlite,operational,PRECIOS_CIUDAD,id_precio,1,integer,,PRIMARY KEY,,,
+sqlite,operational,PRECIOS_CIUDAD,id_insumo,2,integer,,FOREIGN KEY,operational,INSUMOS,id_insumo
+sqlite,operational,PRECIOS_CIUDAD,ciudad,3,varchar(100),,"UNIQUE (id_insumo, ciudad)",,,
+sqlite,operational,PRECIOS_CIUDAD,costo_unitario,4,"numeric(14,2)",,,,,
+sqlite,operational,DETALLE_PRESUPUESTO,id_detalle,1,integer,,PRIMARY KEY,,,
+sqlite,operational,DETALLE_PRESUPUESTO,id_presupuesto,2,integer,,FOREIGN KEY,operational,PRESUPUESTOS,id_presupuesto
+sqlite,operational,DETALLE_PRESUPUESTO,id_insumo,3,integer,,FOREIGN KEY,operational,INSUMOS,id_insumo
+sqlite,operational,DETALLE_PRESUPUESTO,cantidad,4,"numeric(14,3)",,,,,
+sqlite,operational,DETALLE_PRESUPUESTO,costo_unitario_aplicado,5,"numeric(14,2)",,,,,
+mysql,BIMetricsBD,partidas,codigo,1,varchar(50),,PRIMARY KEY,,,
+mysql,BIMetricsBD,partidas,unidad,2,varchar(50),,,,,
+mysql,BIMetricsBD,partidas,descripcion,3,text,,,,,
+mysql,BIMetricsBD,partidas,precio_defecto,4,"numeric(14,2)",,,,,
+mysql,BIMetricsBD,variaciones_opciones,id,1,integer,,PRIMARY KEY,,,
+mysql,BIMetricsBD,variaciones_opciones,codigo,2,varchar(50),,FOREIGN KEY,BIMetricsBD,partidas,codigo
+mysql,BIMetricsBD,variaciones_opciones,tipo,3,varchar(100),,,,,
+mysql,BIMetricsBD,variaciones_opciones,opcion,4,text,,,,,
+mysql,BIMetricsBD,variaciones_opciones,parametro,5,varchar(255),,,,,
+mysql,BIMetricsBD,variaciones_opciones,valor_probado,6,varchar(255),,,,,
+mysql,BIMetricsBD,variaciones_opciones,es_defecto,7,boolean,,,,,
+mysql,BIMetricsBD,variaciones_opciones,precio,8,"numeric(14,2)",,,,,

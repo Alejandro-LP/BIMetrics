@@ -9,12 +9,11 @@ os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/prueba.db"
 import pytest  # noqa: E402
 
 from app import create_app  # noqa: E402
-from app.database import engine  # noqa: E402
-from sqlalchemy import text  # noqa: E402
+from app.services.usuarios_mongo import _coleccion  # noqa: E402
 from sqlalchemy.exc import OperationalError  # noqa: E402
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def c():
     cliente = create_app().test_client()
     usuario = cliente.post("/api/auth/registro", json={
@@ -24,15 +23,14 @@ def c():
         "rol": "arquitecto",
         "autoriza_datos": True,
     }).get_json()
-    with engine.begin() as con:
-        con.execute(text("UPDATE USUARIOS SET rol='administrador' WHERE id_usuario=:id"), {"id": usuario["id_usuario"]})
+    _coleccion().update_one({"id_usuario": usuario["id_usuario"]}, {"$set": {"rol": "administrador"}})
     return cliente
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def datos(c):
     u = c.post("/api/usuarios", json={"nombre_completo": "Ana", "email": "ana@ejemplo.com", "rol": "ingeniero"}).get_json()
-    p = c.post("/api/proyectos", json={"id_usuario": u["id_usuario"], "nombre_obra": "Casa de prueba"}).get_json()
+    p = c.post("/api/proyectos", json={"nombre_obra": "Casa de prueba"}).get_json()
     ins = {}
     for n, u_, costo in [("Concreto", "m3", 485000), ("Acero", "varilla", 46500), ("Oficial", "jornal", 115000)]:
         ins[n] = c.post("/api/insumos", json={"nombre_insumo": n, "unidad_medida": u_, "costo_unitario": costo}).get_json()
@@ -104,7 +102,7 @@ def test_respuestas_api_incluyen_cabeceras_de_seguridad(c):
 
 def test_sql_no_disponible_responde_json_503(c):
     outage = OperationalError("SELECT 1", {}, RuntimeError("offline"))
-    with patch("app.routes.dashboard.engine.connect", side_effect=outage):
+    with patch("app.services.dashboard.operational_engine.connect", side_effect=outage):
         response = c.get("/api/dashboard/resumen")
     assert response.status_code == 503
     assert "error" in response.get_json()
@@ -148,4 +146,10 @@ def test_duplicar_usa_costos_vigentes(c, datos):
 
 
 def test_insumo_en_uso_no_se_borra(c, datos):
-    assert c.delete(f"/api/insumos/{datos['insumos']['Concreto']['id_insumo']}").status_code == 409
+    id_insumo = datos["insumos"]["Concreto"]["id_insumo"]
+    presupuesto = c.post("/api/presupuestos", json={
+        "id_proyecto": datos["proyecto"],
+        "detalle": [{"id_insumo": id_insumo, "cantidad": 1}],
+    })
+    assert presupuesto.status_code == 201
+    assert c.delete(f"/api/insumos/{id_insumo}").status_code == 409

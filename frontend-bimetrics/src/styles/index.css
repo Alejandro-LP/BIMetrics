@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", Aptos, "Segoe UI Variable", "Segoe UI", Arial, ui-sans-serif, system-ui, sans-serif;
+}
 
 :root {
   font-family: "Space Grotesk", Aptos, "Segoe UI Variable", "Segoe UI", Arial, ui-sans-serif, system-ui, sans-serif;

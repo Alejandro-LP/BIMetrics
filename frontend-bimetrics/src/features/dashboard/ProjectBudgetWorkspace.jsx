@@ -16,6 +16,25 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }).format(date)
 }
 
+function isLaborResourceForRole(item, role) {
+  const name = item.nombre_insumo.toLocaleLowerCase('es-CO')
+  const checks = [
+    [/operador/, /operador|operari|maquinaria/],
+    [/oficial de obra negra|oficial de obra|oficial de construcci[oó]n/, /oficial|maestro/],
+    [/ayudante/, /ayudante|auxiliar|jornal/],
+    [/encofrador|formaletero/, /encofrador|formaleter|carpintero de obra/],
+    [/armador de acero/, /armador|acero.*mano de obra|fierrero/],
+    [/mampostero/, /mamposter|ladrillero/],
+    [/electricista/, /electricista|eléctrico.*mano de obra/],
+    [/plomero|hidrosanitario/, /plomero|fontanero|hidrosanit/],
+    [/acabados|pintor|estucador|enchapador/, /acabado|pintor|estuco|enchap|ceramista/],
+    [/instalador de cubierta/, /cubierta|techo|teja/],
+    [/soldador|armador/, /soldador|armador|soldadura/],
+  ]
+  const rule = checks.find(([rolePattern]) => rolePattern.test(role.toLocaleLowerCase('es-CO')))
+  return Boolean(rule && rule[1].test(name))
+}
+
 function GlassSelect({ label, value, onChange, children, disabled = false }) {
   return (
     <label className="block min-w-0 flex-1 text-xs font-medium text-slate-500">
@@ -33,12 +52,25 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
   const [budgets, setBudgets] = useState([])
   const [selectedBudgetId, setSelectedBudgetId] = useState('')
   const [budget, setBudget] = useState(null)
-  const [catalog, setCatalog] = useState([])
+  const [catalogData, setCatalogData] = useState({ city: '', items: [] })
+  const [masterPartidas, setMasterPartidas] = useState([])
+  const [masterPartidaSearch, setMasterPartidaSearch] = useState('')
+  const [masterPartidasLoading, setMasterPartidasLoading] = useState(false)
+  const [masterPartidasHasMore, setMasterPartidasHasMore] = useState(false)
+  const [partidas, setPartidas] = useState([])
+  const [partidaSearch, setPartidaSearch] = useState('')
+  const [selectedPartidaCode, setSelectedPartidaCode] = useState('')
+  const [selectedPartidaDetail, setSelectedPartidaDetail] = useState(null)
+  const [selectedVariationId, setSelectedVariationId] = useState('')
+  const [partidasHasMore, setPartidasHasMore] = useState(false)
+  const [partidaPrice, setPartidaPrice] = useState('')
+  const [partidasLoading, setPartidasLoading] = useState(false)
+  const [laborSelection, setLaborSelection] = useState({})
+  const [laborQuantities, setLaborQuantities] = useState({})
   const [activities, setActivities] = useState([])
   const [activityLoading, setActivityLoading] = useState(true)
   const [projectLoading, setProjectLoading] = useState(true)
   const [budgetLoading, setBudgetLoading] = useState(false)
-  const [catalogLoading, setCatalogLoading] = useState(false)
   const [error, setError] = useState('')
   const [activityError, setActivityError] = useState('')
   const [notice, setNotice] = useState('')
@@ -52,6 +84,8 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
   const noticeTimerRef = useRef(null)
 
   const project = projects.find((item) => String(item.id_proyecto) === String(selectedProjectId))
+  const catalog = useMemo(() => catalogData.city === project?.ciudad ? catalogData.items : [], [catalogData, project?.ciudad])
+  const laborCatalogLoading = Boolean(project?.ciudad && catalogData.city !== project.ciudad)
   const isEditor = editorRoles.includes(user?.rol)
   const isOwner = project?.es_propietario === true || project?.es_propietario === 1
   const canEdit = isEditor && Boolean(project)
@@ -64,8 +98,9 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
         setProjects(items)
         if (items.length) {
           setBudgetLoading(true)
-          setCatalogLoading(true)
           setSelectedProjectId(String(items[0].id_proyecto))
+        } else {
+          setBudgetLoading(false)
         }
       })
       .catch((loadError) => {
@@ -81,12 +116,21 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
     apiRequest(`/presupuestos?id_proyecto=${encodeURIComponent(selectedProjectId)}`, { signal: controller.signal })
       .then((items) => {
         setBudgets(items)
-        setBudgetLoading(Boolean(items.length))
-        setSelectedBudgetId(items.length ? String(items[0].id_presupuesto) : '')
-        if (!items.length) setBudget(null)
+        if (items.length) {
+          setBudgetLoading(true)
+          setSelectedBudgetId(String(items[0].id_presupuesto))
+        } else {
+          setSelectedBudgetId('')
+          setBudget(null)
+          setBudgetLoading(false)
+        }
       })
-      .catch((loadError) => { if (loadError.name !== 'AbortError') setError(loadError.message) })
-      .finally(() => { if (!controller.signal.aborted) setBudgetLoading(false) })
+      .catch((loadError) => {
+        if (loadError.name !== 'AbortError') {
+          setError(loadError.message)
+          setBudgetLoading(false)
+        }
+      })
     return () => controller.abort()
   }, [selectedProjectId])
 
@@ -103,12 +147,68 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
   useEffect(() => {
     if (!project?.ciudad) return undefined
     const controller = new AbortController()
+    const city = project.ciudad
     apiRequest(`/insumos?ciudad=${encodeURIComponent(project.ciudad)}`, { signal: controller.signal })
-      .then(setCatalog)
-      .catch((loadError) => { if (loadError.name !== 'AbortError') setError(loadError.message) })
-      .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false) })
+      .then((items) => { if (!controller.signal.aborted) setCatalogData({ city, items }) })
+      .catch((loadError) => {
+        if (loadError.name !== 'AbortError') {
+          setCatalogData({ city, items: [] })
+          setError(loadError.message)
+        }
+      })
     return () => controller.abort()
   }, [project?.ciudad])
+
+  const projectId = project?.id_proyecto
+  useEffect(() => {
+    if (!projectId) return undefined
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setMasterPartidas([])
+      setMasterPartidasLoading(true)
+      setMasterPartidasHasMore(false)
+      const term = masterPartidaSearch.trim()
+      const endpoint = term
+        ? `/partidas/buscar?q=${encodeURIComponent(term)}&limit=200&offset=0`
+        : '/partidas?limit=200&offset=0'
+      apiRequest(endpoint, { signal: controller.signal })
+        .then((items) => {
+          setMasterPartidas(items)
+          setMasterPartidasHasMore(items.length === 200)
+        })
+        .catch((loadError) => { if (loadError.name !== 'AbortError') setError(loadError.message) })
+        .finally(() => { if (!controller.signal.aborted) setMasterPartidasLoading(false) })
+    }, 200)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [projectId, masterPartidaSearch])
+
+  useEffect(() => {
+    if (!lineDialog || newCatalogItem) return undefined
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      setPartidasLoading(true)
+      const term = partidaSearch.trim()
+      setPartidas([])
+      setPartidasHasMore(false)
+      const endpoint = term
+        ? `/partidas/buscar?q=${encodeURIComponent(term)}&limit=200&offset=0`
+        : '/partidas?limit=200&offset=0'
+      apiRequest(endpoint, { signal: controller.signal })
+        .then((items) => { setPartidas(items); setPartidasHasMore(items.length === 200) })
+        .catch((loadError) => { if (loadError.name !== 'AbortError') setError(loadError.message) })
+        .finally(() => { if (!controller.signal.aborted) setPartidasLoading(false) })
+    }, 250)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [lineDialog, newCatalogItem, partidaSearch])
+
+  useEffect(() => {
+    if (!lineDialog || !selectedPartidaCode || newCatalogItem) return undefined
+    const controller = new AbortController()
+    apiRequest(`/partidas/${encodeURIComponent(selectedPartidaCode)}`, { signal: controller.signal })
+      .then(setSelectedPartidaDetail)
+      .catch((loadError) => { if (loadError.name !== 'AbortError') setError(loadError.message) })
+    return () => controller.abort()
+  }, [lineDialog, newCatalogItem, selectedPartidaCode])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -121,19 +221,51 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
 
   const lines = useMemo(() => Array.isArray(budget?.detalle) ? budget.detalle : [], [budget])
   const filteredLines = useMemo(() => lines.filter((line) => !query || `${line.nombre_insumo} ${line.unidad_medida}`.toLocaleLowerCase('es-CO').includes(query)), [lines, query])
-  const filteredCatalog = useMemo(() => catalog.filter((item) => !query || `${item.nombre_insumo} ${item.unidad_medida}`.toLocaleLowerCase('es-CO').includes(query)), [catalog, query])
+  const filteredMasterPartidas = useMemo(() => (project ? masterPartidas : []).filter((item) => !query || `${item.codigo} ${item.descripcion} ${item.unidad}`.toLocaleLowerCase('es-CO').includes(query)), [masterPartidas, project, query])
+  const selectedPartida = selectedPartidaDetail?.codigo === selectedPartidaCode
+    ? selectedPartidaDetail
+    : partidas.find((item) => item.codigo === selectedPartidaCode)
+  const selectedVariation = selectedPartida?.variaciones?.find((item) => String(item.id) === selectedVariationId)
+  const laborRecommendations = useMemo(() => {
+    if (!selectedPartida) return []
+    const description = selectedPartida.descripcion.toLocaleLowerCase('es-CO')
+    const rules = [
+      { match: /excav|demolici|zanja|movimiento de tierras/, title: 'Excavación y demolición', roles: ['Operador de maquinaria', 'Oficial de obra', 'Ayudante de construcción'] },
+      { match: /concreto|hormig[oó]n|cimentaci|formaleta|estructura|acero de refuerzo/, title: 'Concreto y estructura', roles: ['Oficial de obra negra', 'Ayudante de construcción', 'Encofrador / formaletero', 'Armador de acero'] },
+      { match: /mamposter[ií]a|ladrillo|bloque|pañete|revoque|mortero/, title: 'Mampostería y pañetes', roles: ['Oficial mampostero', 'Ayudante de construcción'] },
+      { match: /electric|cableado|luminaria|tablero|puesta a tierra/, title: 'Instalaciones eléctricas', roles: ['Oficial electricista', 'Auxiliar electricista'] },
+      { match: /hidrosanit|fontaner[ií]a|tuber[ií]a|desag[uü]e|sanitario|grifer[ií]a/, title: 'Instalaciones hidrosanitarias', roles: ['Oficial plomero / instalador hidrosanitario', 'Auxiliar de plomería'] },
+      { match: /pintura|estuco|enchape|cer[aá]mica|acabado|impermeabiliz/, title: 'Acabados', roles: ['Oficial de acabados', 'Pintor / estucador / enchapador', 'Ayudante de construcción'] },
+      { match: /cubierta|teja|cubrici[oó]n|estructura met[aá]lica|soldadura/, title: 'Cubiertas y metal', roles: ['Instalador de cubierta', 'Soldador / armador', 'Ayudante de construcción'] },
+    ]
+    const rule = rules.find((item) => item.match.test(description))
+    if (!rule) return []
+    const availableRoles = rule.roles.filter((role) => catalog.some((item) => Number(item.costo_unitario) > 0 && isLaborResourceForRole(item, role)))
+    return [{ ...rule, availableRoles }]
+  }, [catalog, selectedPartida])
+  const suggestedLaborItems = useMemo(() => {
+    const itemsById = new Map()
+    laborRecommendations.forEach((suggestion) => {
+      suggestion.roles.forEach((role) => {
+        const item = catalog.find((candidate) => Number(candidate.costo_unitario) > 0 && isLaborResourceForRole(candidate, role))
+        if (item) itemsById.set(item.id_insumo, { ...item, sugerido_para: [...(itemsById.get(item.id_insumo)?.sugerido_para || []), role] })
+      })
+    })
+    return [...itemsById.values()]
+  }, [catalog, laborRecommendations])
+  const selectedLaborItems = newCatalogItem
+    ? []
+    : suggestedLaborItems.filter((item) => laborSelection[item.id_insumo] !== false)
   const filteredActivities = useMemo(() => activities.filter((item) => !query || `${item.nombre_archivo} ${item.tipo_evento} ${item.software_origen}`.toLocaleLowerCase('es-CO').includes(query)), [activities, query])
 
   const costTotals = useMemo(() => lines.reduce((totals, line) => {
     const label = String(line.nombre_insumo || '').toLocaleLowerCase('es-CO')
-    const unit = String(line.unidad_medida || '').toLocaleLowerCase('es-CO')
+    const unit = String(line.unidad_medida || '').toLocaleLowerCase('es-CO').trim()
     const subtotal = Number(line.subtotal) || Number(line.cantidad) * Number(line.costo_unitario_aplicado) || 0
     if (/mano de obra|oficial|ayudante|operario|trabajador|salario|maestro/.test(label) || /^(jornal|hora|horas|día|dia|días|dias)$/.test(unit)) totals.labor += subtotal
     else totals.materials += subtotal
-    if (/concreto|hormig[oó]n/.test(label) && /^(m3|m\^3|metro.?cúbico)$/.test(unit)) totals.concrete += Number(line.cantidad) || 0
-    if (/acero|varilla|refuerzo/.test(label) && /^(kg|kilogramo|kilogramos)$/.test(unit)) totals.steel += Number(line.cantidad) || 0
     return totals
-  }, { labor: 0, materials: 0, concrete: 0, steel: 0 }), [lines])
+  }, { labor: 0, materials: 0 }), [lines])
 
   useEffect(() => () => window.clearTimeout(noticeTimerRef.current), [])
 
@@ -154,7 +286,6 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
     setBudget(null)
     setSelectedBudgetId('')
     setBudgetLoading(Boolean(nextProjectId))
-    setCatalogLoading(Boolean(nextProjectId))
     setSelectedProjectId(nextProjectId)
     return items
   }
@@ -186,7 +317,6 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       setSelectedBudgetId('')
       setBudget(null)
       setBudgetLoading(false)
-      setCatalogLoading(false)
       setSelectedProjectId(remaining.length ? String(remaining[0].id_proyecto) : '')
       announce('Proyecto y presupuestos eliminados.')
     } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
@@ -221,13 +351,94 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
     } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
   }
 
+  async function loadMorePartidas() {
+    if (partidasLoading || !partidasHasMore) return
+    setPartidasLoading(true)
+    try {
+      const term = partidaSearch.trim()
+      const nextPages = []
+      let offset = partidas.length
+      let hasMore = true
+      while (hasMore) {
+        const endpoint = term
+          ? `/partidas/buscar?q=${encodeURIComponent(term)}&limit=200&offset=${offset}`
+          : `/partidas?limit=200&offset=${offset}`
+        const nextPage = await apiRequest(endpoint)
+        nextPages.push(...nextPage)
+        offset += nextPage.length
+        hasMore = nextPage.length === 200
+      }
+      setPartidas((items) => [...items, ...nextPages])
+      setPartidasHasMore(false)
+    } catch (actionError) {
+      setError(actionError.message)
+    } finally {
+      setPartidasLoading(false)
+    }
+  }
+
+  async function loadAllMasterPartidas() {
+    if (masterPartidasLoading || !masterPartidasHasMore) return
+    setMasterPartidasLoading(true)
+    try {
+      const term = masterPartidaSearch.trim()
+      const remaining = []
+      let offset = masterPartidas.length
+      let hasMore = true
+      while (hasMore) {
+        const endpoint = term
+          ? `/partidas/buscar?q=${encodeURIComponent(term)}&limit=200&offset=${offset}`
+          : `/partidas?limit=200&offset=${offset}`
+        const page = await apiRequest(endpoint)
+        remaining.push(...page)
+        offset += page.length
+        hasMore = page.length === 200
+      }
+      setMasterPartidas((items) => [...items, ...remaining])
+      setMasterPartidasHasMore(false)
+    } catch (actionError) {
+      setError(actionError.message)
+    } finally {
+      setMasterPartidasLoading(false)
+    }
+  }
+
   async function createLine(event) {
     event.preventDefault()
     if (!budget) return
     setBusyAction('line')
     try {
       let idInsumo = Number(lineForm.id_insumo)
-      if (newCatalogItem) {
+      if (!newCatalogItem) {
+        if (!selectedPartida) throw new Error('Selecciona un insumo del catálogo.')
+        const varianteLabel = selectedVariation
+          ? [selectedVariation.opcion, selectedVariation.parametro, selectedVariation.valor_probado].filter(Boolean).join(' · ')
+          : ''
+        const prefijo = `${selectedPartida.codigo} · `
+        const sufijoVariante = varianteLabel ? ` · ${varianteLabel}`.slice(0, 70) : ''
+        const longitudDescripcion = Math.max(0, 150 - prefijo.length - sufijoVariante.length)
+        const nombrePartida = `${prefijo}${selectedPartida.descripcion.slice(0, longitudDescripcion)}${sufijoVariante}`
+        const existente = catalog.find((item) => item.nombre_insumo === nombrePartida)
+        if (existente) {
+          idInsumo = existente.id_insumo
+        } else {
+          const item = await apiRequest('/insumos', {
+            method: 'POST',
+            body: JSON.stringify({
+              nombre_insumo: nombrePartida,
+              unidad_medida: selectedPartida.unidad,
+              costo_unitario: Number(partidaPrice),
+              ciudad: project?.ciudad || 'Bogotá',
+            }),
+          })
+          idInsumo = item.id_insumo
+          setCatalogData((current) => {
+            const city = project?.ciudad || 'Bogotá'
+            const items = current.city === city ? current.items : []
+            return { city, items: [...items, item] }
+          })
+        }
+      } else {
         const item = await apiRequest('/insumos', {
           method: 'POST',
           body: JSON.stringify({
@@ -240,15 +451,29 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       }
       const updated = await apiRequest(`/presupuestos/${budget.id_presupuesto}/detalle`, {
         method: 'POST',
-        body: JSON.stringify({ id_insumo: idInsumo, cantidad: Number(lineForm.cantidad) }),
+        body: JSON.stringify({
+          id_insumo: idInsumo,
+          cantidad: Number(lineForm.cantidad),
+          lineas_mano_obra: selectedLaborItems.map((item) => ({
+            id_insumo: item.id_insumo,
+            cantidad: Number(laborQuantities[item.id_insumo] || 1),
+          })),
+        }),
       })
       setBudget(updated)
       setBudgets((items) => items.map((item) => item.id_presupuesto === updated.id_presupuesto ? updated : item))
       setLineDialog(false)
       setLineForm({ id_insumo: '', cantidad: '' })
+      setSelectedPartidaCode('')
+      setSelectedPartidaDetail(null)
+      setSelectedVariationId('')
+      setPartidaSearch('')
+      setPartidaPrice('')
       setNewItemForm({ nombre_insumo: '', unidad_medida: '', costo_unitario: '' })
       setNewCatalogItem(false)
-      announce('Insumo agregado al presupuesto.')
+      announce(selectedLaborItems.length
+        ? `Insumo y ${selectedLaborItems.length} recurso(s) de mano de obra agregados al presupuesto.`
+        : 'Insumo agregado al presupuesto.')
     } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
@@ -331,11 +556,11 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
         </div>
         {projectLoading ? <p className="py-6 text-sm text-slate-500">Cargando proyectos…</p> : projects.length ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <GlassSelect label="Proyecto" value={selectedProjectId} onChange={(event) => { setBudgets([]); setBudget(null); setSelectedBudgetId(''); setBudgetLoading(true); setCatalogLoading(true); setError(''); setSelectedProjectId(event.target.value) }}>
+              <GlassSelect label="Obra activa" value={selectedProjectId} onChange={(event) => { setBudgets([]); setBudget(null); setSelectedBudgetId(''); setBudgetLoading(true); setError(''); setSelectedProjectId(event.target.value) }}>
               {projects.map((item) => <option key={item.id_proyecto} value={item.id_proyecto}>{item.nombre_obra} · {item.ciudad || 'Bogotá'}</option>)}
             </GlassSelect>
             <div className="flex items-end gap-3">
-              <GlassSelect label="Presupuesto" value={selectedBudgetId} disabled={!budgets.length} onChange={(event) => { setBudgetLoading(true); setError(''); setSelectedBudgetId(event.target.value) }}>
+              <GlassSelect label="Presupuesto" value={selectedBudgetId} disabled={!budgets.length} onChange={(event) => { setBudget(null); setBudgetLoading(true); setError(''); setSelectedBudgetId(event.target.value) }}>
                 {budgets.length ? budgets.map((item, index) => <option key={item.id_presupuesto} value={item.id_presupuesto}>Presupuesto {budgets.length - index} · {formatDate(item.fecha_calculo)} · {currency.format(item.costo_total || 0)}</option>) : <option value="">Sin presupuestos</option>}
               </GlassSelect>
               {canEdit && <button type="button" onClick={createBudget} disabled={busyAction === 'create-budget'} className="mb-0.5 shrink-0 rounded-xl border border-white/10 px-3 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05]">Nuevo</button>}
@@ -344,30 +569,30 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
         ) : <EmptyState title="Todav?a no hay proyectos" description="Crea una obra para organizar sus presupuestos y actividad BIM." action="Crear proyecto" onAction={() => setProjectDialog(true)} />}
       </GlassCard>
 
-      {project && <GlassCard className="p-5 sm:p-6">
+      {project && <GlassCard className="border border-indigo-300/15 bg-indigo-400/[0.035] p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Obra en desarrollo</p><h2 className="mt-2 text-xl font-semibold text-white">{project.nombre_obra}</h2><p className="mt-1 text-sm text-slate-400">{[project.ciudad, project.cliente, project.responsable].filter(Boolean).join(' · ')}</p></div>
+          <div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Proyecto seleccionado</p><h2 className="mt-2 text-2xl font-semibold text-white">{project.nombre_obra}</h2><p className="mt-1 text-sm text-slate-400">{budgetLoading ? 'Cargando el presupuesto de esta obra…' : budget ? `Presupuesto #${budget.id_presupuesto} · ${formatDate(budget.fecha_calculo)}` : budgets.length ? 'Selecciona un presupuesto para esta obra.' : 'Esta obra aún no tiene presupuesto.'}</p></div>
           <div className="flex flex-wrap gap-2">
-            {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} onClick={() => { setLineDialog(true); setNewCatalogItem(false) }} className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"> Agregar partida</button>}
+            {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} onClick={() => { setLineDialog(true); setNewCatalogItem(false); setSelectedPartidaCode(''); setSelectedPartidaDetail(null); setSelectedVariationId(''); setPartidaSearch(''); setPartidaPrice('') }} className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"> Agregar insumo</button>}
             <button type="button" disabled={!budget || Boolean(busyAction)} onClick={recalculate} className="inline-flex items-center justify-center rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"> Recalcular</button>
             {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} onClick={duplicateBudget} className="inline-flex items-center justify-center rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"> Duplicar</button>}
             <button type="button" disabled={!budget || Boolean(busyAction)} onClick={exportExcel} className="inline-flex items-center justify-center rounded-xl border border-white/10 px-3.5 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05] disabled:opacity-40"> Excel</button>
           </div>
         </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            ['Costo estimado', currency.format(Number(budget?.costo_total) || 0)],
-            ['Partidas', String(lines.length).padStart(2, '0')],
-            ['Concreto', costTotals.concrete ? `${quantityFormat.format(costTotals.concrete)} m³` : '—'],
-            ['Acero', costTotals.steel ? `${quantityFormat.format(costTotals.steel)} kg` : '—'],
+            ['Costo estimado', budgetLoading && !budget ? 'Cargando…' : currency.format(Number(budget?.costo_total) || 0)],
+            ['Insumos', currency.format(costTotals.materials)],
+            ['Mano de obra', currency.format(costTotals.labor)],
+            ['Elementos del presupuesto', String(lines.length).padStart(2, '0')],
           ].map(([label, value]) => <div key={label} className="rounded-xl border border-white/[0.07] bg-black/20 p-4"><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-slate-500">{label}</p><p className="mt-2 text-lg font-semibold text-white">{value}</p></div>)}
         </div>
-        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-400"><span>Materiales y otros: <strong className="text-slate-200">{currency.format(costTotals.materials)}</strong></span><span>Mano de obra: <strong className="text-slate-200">{currency.format(costTotals.labor)}</strong></span><span className="ml-auto">Último cálculo: {formatDate(budget?.fecha_calculo)}</span></div>
+        <div className="mt-4 grid gap-2 border-t border-white/[0.08] pt-4 text-xs text-slate-400 sm:grid-cols-3"><span>Ciudad: <strong className="text-slate-200">{project.ciudad || 'Sin definir'}</strong></span><span>Cliente: <strong className="text-slate-200">{project.cliente || 'Sin asignar'}</strong></span><span>Responsable: <strong className="text-slate-200">{project.responsable || 'Sin asignar'}</strong></span></div>
       </GlassCard>}
 
       <GlassCard id="presupuesto" className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] p-5 sm:px-6">
-          <div><p className="text-sm font-semibold text-white">Detalle del presupuesto</p><p className="mt-1 text-xs text-slate-500">{budget?.nombre_obra || project?.nombre_obra || 'Selecciona un proyecto'} · {lines.length} partidas</p></div>
+          <div><p className="text-sm font-semibold text-white">Detalle del presupuesto</p><p className="mt-1 text-xs text-slate-500">{budget?.nombre_obra || project?.nombre_obra || 'Selecciona un proyecto'} · {lines.length} insumos y recursos</p></div>
           {budgetLoading && <span className="text-xs text-slate-500">Actualizando…</span>}
         </div>
         <div className="overflow-x-auto">
@@ -375,7 +600,7 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
             <thead className="bg-white/[0.025] text-[10px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-5 py-3 font-semibold sm:px-6">Insumo</th><th className="px-3 py-3 font-semibold">Unidad</th><th className="px-3 py-3 text-right font-semibold">Cantidad</th><th className="px-3 py-3 text-right font-semibold">Costo unitario</th><th className="px-3 py-3 text-right font-semibold">Subtotal</th><th className="px-4 py-3" /></tr></thead>
             <tbody className="divide-y divide-white/[0.06]">
               {filteredLines.map((line) => <tr key={line.id_detalle} className="text-slate-300 transition hover:bg-white/[0.02]"><td className="max-w-[260px] truncate px-5 py-3.5 font-medium text-slate-200 sm:px-6">{line.nombre_insumo}</td><td className="px-3 py-3.5 text-slate-500">{line.unidad_medida}</td><td className="px-3 py-3.5 text-right tabular-nums">{quantityFormat.format(Number(line.cantidad))}</td><td className="px-3 py-3.5 text-right tabular-nums">{currency.format(Number(line.costo_unitario_aplicado))}</td><td className="px-3 py-3.5 text-right font-medium tabular-nums text-white">{currency.format(Number(line.subtotal) || Number(line.cantidad) * Number(line.costo_unitario_aplicado))}</td><td className="px-4 py-3.5 text-right">{canEdit && <button type="button" onClick={() => removeLine(line)} aria-label={`Quitar ${line.nombre_insumo}`} className="rounded-md px-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-300">Quitar</button>}</td></tr>)}
-              {(!filteredLines.length) && <tr><td colSpan="6" className="px-6 py-10 text-center text-slate-500">{budget ? query ? 'No hay partidas que coincidan con la búsqueda.' : 'Este presupuesto todavía no tiene partidas.' : project ? budgets.length ? 'Selecciona un presupuesto.' : 'Este proyecto no tiene presupuestos. Crea uno para comenzar.' : 'Selecciona o crea un proyecto para consultar el presupuesto.'}</td></tr>}
+              {(!filteredLines.length) && <tr><td colSpan="6" className="px-6 py-10 text-center text-slate-500">{budgetLoading ? `Cargando presupuesto de ${project?.nombre_obra || 'la obra'}…` : budget ? query ? 'No hay insumos que coincidan con la búsqueda.' : 'Este presupuesto todavía no tiene insumos.' : project ? budgets.length ? 'Selecciona un presupuesto.' : 'Este proyecto no tiene presupuesto. Usa “Nuevo” para comenzar.' : 'Selecciona o crea un proyecto para consultar el presupuesto.'}</td></tr>}
             </tbody>
             {budget && <tfoot><tr className="border-t border-white/10 bg-white/[0.02]"><td colSpan="4" className="px-5 py-4 text-right font-semibold text-slate-300 sm:px-6">Total del presupuesto</td><td className="px-3 py-4 text-right text-sm font-semibold text-white">{currency.format(Number(budget.costo_total) || 0)}</td><td /></tr></tfoot>}
           </table>
@@ -385,45 +610,54 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
       <section className="grid gap-6 xl:grid-cols-2">
         <GlassCard id="catalog" className="overflow-hidden">
           <div className="border-b border-white/[0.08] px-5 py-5 sm:px-6">
-            <p className="text-sm font-semibold text-white">Catálogo de insumos</p>
-            <p className="mt-1 text-xs text-slate-500">Precios aplicables a {project?.ciudad || 'la ciudad seleccionada'}</p>
+            <p className="text-sm font-semibold text-white">Catálogo maestro de insumos</p>
+            <p className="mt-1 text-xs text-slate-500">Insumos y precios del catálogo SQL, aplicables a {project?.ciudad || 'la ciudad del proyecto'}.</p>
+            <input value={masterPartidaSearch} disabled={masterPartidasLoading} onChange={(event) => setMasterPartidaSearch(event.target.value)} placeholder="Buscar insumo por código o descripción" className="mt-3 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none focus:border-indigo-400/40 disabled:opacity-50" />
           </div>
-          {catalogLoading ? (
-            <div className="space-y-3 p-5" aria-label="Cargando catálogo">
+          {masterPartidasLoading && !masterPartidas.length ? (
+            <div className="space-y-3 p-5" aria-label="Cargando partidas">
               {[0, 1, 2, 3].map((row) => <div key={row} className="h-10 animate-pulse rounded-lg bg-white/[0.045]" />)}
             </div>
-          ) : !filteredCatalog.length ? (
+          ) : !filteredMasterPartidas.length ? (
             <div className="p-4">
               <EmptyState
-                title={catalog.length ? 'No hay insumos que coincidan' : 'El catálogo está vacío para esta ciudad'}
-                description="Consulta los precios por unidad y ciudad desde esta lista."
+                title={masterPartidas.length || masterPartidaSearch ? 'No hay insumos que coincidan' : 'No hay insumos cargados'}
+                description={masterPartidas.length || masterPartidaSearch ? 'Prueba con otro código o descripción.' : 'Importa el catálogo de precios CSV a MySQL para mostrar aquí las partidas.'}
                 action={canEdit && budget ? 'Agregar insumo' : undefined}
-                onAction={canEdit && budget ? () => { setLineDialog(true); setNewCatalogItem(true) } : undefined}
+                onAction={canEdit && budget ? () => { setLineDialog(true); setNewCatalogItem(false); setSelectedPartidaCode(''); setSelectedPartidaDetail(null); setSelectedVariationId('') } : undefined}
               />
             </div>
           ) : (
-            <div className="max-h-[420px] overflow-auto">
-              <table className="w-full min-w-[400px] border-separate border-spacing-0 text-left text-sm">
-                <thead className="sticky top-0 z-10 bg-[#11151e] text-[10px] uppercase tracking-[.12em] text-slate-500">
-                  <tr>
-                    <th scope="col" className="px-5 py-3.5 font-semibold sm:px-6">Insumo</th>
-                    <th scope="col" className="px-4 py-3.5 font-semibold">Unidad</th>
-                    <th scope="col" className="px-5 py-3.5 text-right font-semibold sm:px-6">Precio unitario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCatalog.map((item) => (
-                    <tr key={item.id_insumo} className="transition-colors hover:bg-white/[0.035]">
-                      <td className="border-t border-white/[0.06] px-5 py-3.5 font-medium text-slate-200 sm:px-6">{item.nombre_insumo}</td>
-                      <td className="border-t border-white/[0.06] px-4 py-3.5 text-slate-400">{item.unidad_medida}</td>
-                      <td className="border-t border-white/[0.06] px-5 py-3.5 text-right font-medium tabular-nums text-slate-200 sm:px-6">
-                        {Number(item.costo_unitario) > 0 ? currency.format(Number(item.costo_unitario)) : <span className="font-normal text-amber-300">Sin precio</span>}
-                      </td>
+            <>
+              <div className="max-h-[440px] overflow-auto">
+                <table className="w-full min-w-[620px] border-separate border-spacing-0 text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-[#11151e] text-[10px] uppercase tracking-[.12em] text-slate-500">
+                    <tr>
+                      <th scope="col" className="px-4 py-3 font-semibold">Código</th>
+                      <th scope="col" className="px-4 py-3 font-semibold">Insumo</th>
+                      <th scope="col" className="px-3 py-3 font-semibold">Unidad</th>
+                      <th scope="col" className="px-4 py-3 text-right font-semibold">Precio base</th>
+                      {canEdit && <th scope="col" className="px-4 py-3" />}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredMasterPartidas.map((item) => (
+                      <tr key={item.codigo} className="transition-colors hover:bg-white/[0.035]">
+                        <td className="border-t border-white/[0.06] px-4 py-3 font-mono text-[11px] text-indigo-200">{item.codigo}</td>
+                        <td className="max-w-[280px] border-t border-white/[0.06] px-4 py-3 text-xs text-slate-200">{item.descripcion}</td>
+                        <td className="border-t border-white/[0.06] px-3 py-3 text-xs text-slate-400">{item.unidad}</td>
+                        <td className="border-t border-white/[0.06] px-4 py-3 text-right text-xs tabular-nums text-slate-200">{currency.format(item.precio_defecto)}</td>
+                        {canEdit && <td className="border-t border-white/[0.06] px-4 py-3 text-right"><button type="button" disabled={!budget} onClick={() => { setLineDialog(true); setNewCatalogItem(false); setSelectedPartidaCode(item.codigo); setSelectedPartidaDetail(null); setSelectedVariationId(''); setPartidaSearch(item.descripcion); setPartidaPrice(String(item.precio_defecto)) }} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-indigo-200 hover:bg-white/[0.05] disabled:opacity-40">Agregar</button></td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-3">
+                <span className="text-[10px] text-slate-500">{filteredMasterPartidas.length} insumos mostrados{masterPartidaSearch ? ' en la búsqueda' : ' de la página actual'}</span>
+                {masterPartidasHasMore && <button type="button" onClick={loadAllMasterPartidas} disabled={masterPartidasLoading} className="text-xs text-indigo-300 hover:text-indigo-200 disabled:opacity-50">{masterPartidasLoading ? 'Cargando insumos restantes…' : 'Cargar todos los insumos restantes'}</button>}
+              </div>
+            </>
           )}
         </GlassCard>
 
@@ -436,10 +670,10 @@ function ProjectBudgetWorkspace({ user, search = '' }) {
 
       {projectDialog && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProjectDialog(false) }}><motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg"><GlassCard role="dialog" aria-modal="true" aria-labelledby="new-project-title" className="p-6 sm:p-7"><div className="mb-5 flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Nueva obra</p><h2 id="new-project-title" className="mt-1 text-xl font-semibold text-white">Iniciar proyecto</h2></div><button type="button" onClick={() => setProjectDialog(false)} className="text-xl text-slate-500 hover:text-white" aria-label="Cerrar">×</button></div><form onSubmit={createProject} className="space-y-4"><label className="block text-sm text-slate-300">Nombre del proyecto<input required maxLength={150} value={projectForm.nombre_obra} onChange={(event) => setProjectForm({ ...projectForm, nombre_obra: event.target.value })} placeholder="Ej. Casa en Chapinero" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label><label className="block text-sm text-slate-300">Ciudad<select value={projectForm.ciudad} onChange={(event) => setProjectForm({ ...projectForm, ciudad: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-[#11151e] px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50">{cities.map((city) => <option key={city}>{city}</option>)}</select></label><label className="block text-sm text-slate-300">Cliente (opcional)<input maxLength={150} value={projectForm.cliente} onChange={(event) => setProjectForm({ ...projectForm, cliente: event.target.value })} placeholder="Nombre del cliente" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label><div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setProjectDialog(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={busyAction === 'project'} className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busyAction === 'project' ? 'Creando…' : 'Crear proyecto'}</button></div></form></GlassCard></motion.div></div>}
 
-      {lineDialog && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLineDialog(false) }}><motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg"><GlassCard role="dialog" aria-modal="true" aria-labelledby="add-line-title" className="p-6 sm:p-7"><div className="mb-5 flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Nueva partida</p><h2 id="add-line-title" className="mt-1 text-xl font-semibold text-white">Agregar insumo</h2></div><button type="button" onClick={() => setLineDialog(false)} className="text-xl text-slate-500 hover:text-white" aria-label="Cerrar">×</button></div><form onSubmit={createLine} className="space-y-4">{!newCatalogItem ? <label className="block text-sm text-slate-300">Insumo del catálogo<select required value={lineForm.id_insumo} onChange={(event) => setLineForm({ ...lineForm, id_insumo: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-[#11151e] px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50"><option value="">Selecciona un insumo</option>{catalog.map((item) => <option key={item.id_insumo} value={item.id_insumo} disabled={Number(item.costo_unitario) <= 0}>{item.nombre_insumo} · {item.unidad_medida} · {Number(item.costo_unitario) > 0 ? currency.format(item.costo_unitario) : 'sin precio'}</option>)}</select></label> : <><label className="block text-sm text-slate-300">Nombre del insumo<input required maxLength={150} value={newItemForm.nombre_insumo} onChange={(event) => setNewItemForm({ ...newItemForm, nombre_insumo: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm text-slate-300">Unidad<input required maxLength={30} placeholder="Ej. kg, m³" value={newItemForm.unidad_medida} onChange={(event) => setNewItemForm({ ...newItemForm, unidad_medida: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><label className="block text-sm text-slate-300">Precio para {project?.ciudad}<input required type="number" min="0.01" step="0.01" value={newItemForm.costo_unitario} onChange={(event) => setNewItemForm({ ...newItemForm, costo_unitario: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label></div></>}
+      {lineDialog && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLineDialog(false) }}><motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg"><GlassCard role="dialog" aria-modal="true" aria-labelledby="add-line-title" className="p-6 sm:p-7"><div className="mb-5 flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Nuevo insumo</p><h2 id="add-line-title" className="mt-1 text-xl font-semibold text-white">Agregar insumo al presupuesto</h2></div><button type="button" onClick={() => setLineDialog(false)} className="text-xl text-slate-500 hover:text-white" aria-label="Cerrar">×</button></div><form onSubmit={createLine} className="space-y-4">{!newCatalogItem ? <><label className="block text-sm text-slate-300">Buscar en el catálogo de insumos<input value={partidaSearch} disabled={partidasLoading} onChange={(event) => setPartidaSearch(event.target.value)} placeholder="Ej. concreto, tubería, pintura…" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label><label className="block text-sm text-slate-300">Insumo disponible<select required value={selectedPartidaCode} onChange={(event) => { const code = event.target.value; setSelectedPartidaCode(code); setSelectedPartidaDetail(null); setSelectedVariationId(''); const selected = partidas.find((item) => item.codigo === code); setPartidaPrice(selected?.precio_defecto == null ? '' : String(selected.precio_defecto)) }} className="mt-2 w-full rounded-xl border border-white/10 bg-[#11151e] px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50"><option value="">{partidasLoading ? 'Buscando insumos…' : 'Selecciona un insumo'}</option>{partidas.map((item) => <option key={item.codigo} value={item.codigo}>{item.codigo} · {item.descripcion} · {item.unidad} · {currency.format(item.precio_defecto)}</option>)}</select></label>{partidasHasMore && <button type="button" onClick={loadMorePartidas} disabled={partidasLoading} className="text-xs text-indigo-300 hover:text-indigo-200 disabled:opacity-50">{partidasLoading ? 'Cargando catálogo completo…' : `Cargar el resto de insumos (${partidas.length} cargadas)`}</button>}{selectedPartida && <div className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-4"><div><p className="text-xs font-semibold text-white">{selectedPartida.codigo} · {selectedPartida.descripcion}</p><p className="mt-1 text-xs text-slate-400">Unidad: {selectedPartida.unidad} · Precio base del Excel: {currency.format(selectedPartida.precio_defecto)}</p>{selectedPartidaDetail?.variaciones?.length > 0 && <label className="mt-3 block text-xs text-slate-300">Opción de la partida<select value={selectedVariationId} onChange={(event) => { const id = event.target.value; setSelectedVariationId(id); const variation = selectedPartidaDetail.variaciones.find((item) => String(item.id) === id); setPartidaPrice(variation?.precio == null ? '' : String(variation.precio)) }} className="mt-2 w-full rounded-lg border border-white/10 bg-[#11151e] px-3 py-2.5 text-sm text-white outline-none focus:border-indigo-400/50"><option value="">Precio base de la partida</option>{selectedPartidaDetail.variaciones.map((variation) => { const label = [variation.opcion, variation.parametro, variation.valor_probado].filter(Boolean).join(' · ') || variation.tipo; return <option key={variation.id} value={variation.id}>{label} · {variation.precio == null ? 'precio por definir' : currency.format(variation.precio)}</option> })}</select></label>}{selectedPartidaCode && !selectedPartidaDetail && <p className="mt-2 text-[11px] text-slate-500">Cargando opciones de esta partida…</p>}<label className="mt-3 block text-xs text-slate-300">Precio unitario para {project?.ciudad || 'la ciudad del proyecto'}<input required type="number" min="0" step="0.01" value={partidaPrice} onChange={(event) => setPartidaPrice(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400/50" /></label><p className="mt-1 text-[11px] text-slate-500">Confirma o ajusta el precio antes de agregarlo al presupuesto. Si la partida ya tiene precio local, se conserva el registrado.</p><p className="mt-2 text-[11px] text-slate-400">Referencia laboral Colombia 2026: salario mínimo legal mensual de {currency.format(1750905)} y auxilio de transporte de {currency.format(249095)} cuando aplica. Son pisos/beneficios legales, no tarifas de oficial, ayudante ni costo total del empleador. <a className="text-indigo-300 underline" href="https://dapre.presidencia.gov.co/normativa/normativa/DECRETO%20No.%200159%20DEL%2019%20DE%20FEBRERO%20DE%202026.pdf" target="_blank" rel="noreferrer">Decreto 0159 de 2026</a> · <a className="text-indigo-300 underline" href="https://www.presidencia.gov.co/Documents/251230-Decreto-1470-MinTrabajo.pdf" target="_blank" rel="noreferrer">Decreto 1470 de 2025</a></p></div>{laborRecommendations.map((suggestion) => <div key={suggestion.title} className="border-t border-white/[0.08] pt-3"><p className="text-xs font-semibold text-indigo-200">Mano de obra sugerida · {suggestion.title}</p><div className="mt-2 flex flex-wrap gap-1.5">{suggestion.roles.map((role) => { const available = suggestion.availableRoles.includes(role); return <span key={role} className={`rounded-full border px-2 py-1 text-[10px] ${available ? 'border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-200' : 'border-indigo-300/15 bg-indigo-300/[0.06] text-slate-300'}`}>{role} · {available ? 'disponible' : 'por agregar'}</span> })}</div><p className="mt-2 text-[10px] text-slate-500">Sugerencia por palabras clave de la actividad, no constituye análisis de rendimiento ni cálculo de cuadrilla. Define cantidades y tarifas según planos, alcance y cotización.</p></div>)}{laborRecommendations.length > 0 && <div className="border-t border-white/[0.08] pt-3"><p className="text-xs font-semibold text-emerald-200">Mano de obra que se agregará automáticamente</p>{laborCatalogLoading ? <p className="mt-2 text-[11px] text-slate-400">Revisando insumos con precio para {project?.ciudad || "esta ciudad"}…</p> : suggestedLaborItems.length ? <div className="mt-2 space-y-2">{suggestedLaborItems.map((item) => <div key={item.id_insumo} className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-black/20 p-2"><input type="checkbox" checked={laborSelection[item.id_insumo] !== false} onChange={(event) => setLaborSelection((current) => ({ ...current, [item.id_insumo]: event.target.checked }))} aria-label={`Incluir ${item.nombre_insumo}`} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] text-slate-200">{item.nombre_insumo}</p><p className="text-[10px] text-slate-500">{item.unidad_medida} · {currency.format(item.costo_unitario)}</p></div><input type="number" required={laborSelection[item.id_insumo] !== false} min="0.001" step="any" value={laborQuantities[item.id_insumo] ?? '1'} onChange={(event) => setLaborQuantities((current) => ({ ...current, [item.id_insumo]: event.target.value }))} aria-label={`Cantidad de ${item.nombre_insumo}`} className="w-20 rounded-md border border-white/10 bg-[#11151e] px-2 py-1.5 text-xs text-white" /></div>)}</div> : <p className="mt-2 text-[11px] text-amber-200">No hay insumos de mano de obra con precio para {project?.ciudad || 'esta ciudad'}. La app no puede agregarlos hasta que registres su tarifa en el catálogo.</p>}<p className="mt-2 text-[10px] text-slate-500">Los perfiles encontrados quedan marcados para agregar. La cantidad inicial es 1 unidad por perfil y puedes ajustarla según el rendimiento de la actividad.</p></div>}{!laborRecommendations.length && <p className="text-[11px] text-slate-400">No hay una regla específica para esta descripción. Revisa el alcance y define el perfil de mano de obra según la actividad.</p>}</div>}</> : <><label className="block text-sm text-slate-300">Nombre del insumo<input required maxLength={150} value={newItemForm.nombre_insumo} onChange={(event) => setNewItemForm({ ...newItemForm, nombre_insumo: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm text-slate-300">Unidad<input required maxLength={30} placeholder="Ej. kg, m³" value={newItemForm.unidad_medida} onChange={(event) => setNewItemForm({ ...newItemForm, unidad_medida: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><label className="block text-sm text-slate-300">Precio para {project?.ciudad}<input required type="number" min="0.01" step="0.01" value={newItemForm.costo_unitario} onChange={(event) => setNewItemForm({ ...newItemForm, costo_unitario: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label></div></>}
               <label className="block text-sm text-slate-300">Cantidad<input required type="number" min="0.001" step="any" value={lineForm.cantidad} onChange={(event) => setLineForm({ ...lineForm, cantidad: event.target.value })} placeholder="Ej. 2.5" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label>
               {canEdit && <button type="button" onClick={() => { setNewCatalogItem(!newCatalogItem); setLineForm({ ...lineForm, id_insumo: '' }) }} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">{newCatalogItem ? 'Elegir del catálogo' : 'Crear insumo con precio para esta ciudad'}</button>}
-              <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4"><button type="button" onClick={() => setLineDialog(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={busyAction === 'line'} className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busyAction === 'line' ? 'Guardando…' : 'Agregar partida'}</button></div>
+              <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4"><button type="button" onClick={() => setLineDialog(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={busyAction === 'line' || laborCatalogLoading || (!newCatalogItem && (!selectedPartidaCode || !selectedPartidaDetail))} className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busyAction === 'line' ? 'Guardando…' : 'Agregar insumo'}</button></div>
             </form></GlassCard></motion.div></div>}
     </div>
   )

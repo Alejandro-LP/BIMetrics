@@ -20,7 +20,25 @@ SHUTDOWN_TIMEOUT_SECONDS = 8
 
 
 def find_npm() -> str:
-    """Find npm on PATH, including the Windows command shim."""
+    """Prefer the user-scoped Node version pinned by the project, then PATH."""
+    configured_node_home = os.getenv("BIMETRICS_NODE_HOME")
+    if not configured_node_home and os.name == "nt":
+        local_app_data = os.getenv("LOCALAPPDATA")
+        version_file = ROOT / ".nvmrc"
+        if local_app_data and version_file.is_file():
+            version = version_file.read_text(encoding="utf-8").strip().lstrip("v")
+            configured_node_home = str(
+                Path(local_app_data)
+                / "Programs"
+                / "BIMetrics"
+                / f"node-v{version}-win-x64"
+            )
+
+    if configured_node_home:
+        local_npm = Path(configured_node_home) / ("npm.cmd" if os.name == "nt" else "npm")
+        if local_npm.is_file():
+            return str(local_npm)
+
     candidates = ("npm.cmd", "npm") if os.name == "nt" else ("npm",)
     for candidate in candidates:
         executable = shutil.which(candidate)

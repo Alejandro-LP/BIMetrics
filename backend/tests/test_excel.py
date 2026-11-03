@@ -10,7 +10,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/prueba_excel.db"
 os.environ["SECRET_KEY"] = "clave-super-secreta-para-tests-excel-12345"
 
 from app import create_app
-from app.database import engine
+from app.database import operational_engine as engine
 from app.services.excel import exportar_presupuesto_excel
 
 
@@ -78,7 +78,7 @@ def test_generacion_servicio_excel():
     assert ws["F9"].value == "=SUM(F7:F8)"
 
 
-def test_endpoint_excel_presupuesto():
+def test_endpoint_excel_presupuesto(mongo_store):
     """Valida el endpoint HTTP GET /api/presupuestos/<id>/excel."""
     app = create_app()
     with app.test_client() as cliente:
@@ -86,11 +86,14 @@ def test_endpoint_excel_presupuesto():
         with cliente.session_transaction() as sess:
             sess["id_usuario"] = 555
 
+        mongo_store["users"]["usuarios"].insert_one({
+            "id_usuario": 555,
+            "nombre_completo": "Ing. Carlos Mendoza",
+            "email": "carlos@bimetrics.local",
+            "rol": "ingeniero",
+            "password_hash": "hash-no-usado-en-este-test",
+        })
         with engine.begin() as con:
-            con.execute(text("""
-                INSERT INTO USUARIOS (id_usuario, nombre_completo, email, rol)
-                VALUES (555, 'Ing. Carlos Mendoza', 'carlos@bimetrics.local', 'ingeniero')
-            """))
             con.execute(text("""
                 INSERT INTO PROYECTOS (id_proyecto, id_usuario, nombre_obra, ciudad)
                 VALUES (777, 555, 'Torre Horizonte', 'Medellín')

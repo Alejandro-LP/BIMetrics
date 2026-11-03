@@ -1,77 +1,54 @@
-"""Administración global de usuarios."""
-from flask import Blueprint, jsonify, request, session
-from sqlalchemy import text
+"""Endpoints HTTP para administración de usuarios."""
 
-from ..config import ROLES
-from ..database import engine
+from flask import Blueprint, jsonify, request, session
+
 from ..errors import ErrorApi
-from ..utils import en_uso, filas, obtener, pedir
+from ..services.usuarios import (
+    actualizar_usuario,
+    crear_usuario,
+    eliminar_usuario,
+    listar_usuarios,
+    obtener_usuario,
+    validar_usuario,
+)
 
 bp = Blueprint("usuarios", __name__, url_prefix="/api/usuarios")
-CAMPOS = ["nombre_completo", "email", "rol"]
-
-
-def _validar():
-    d = pedir(CAMPOS)
-    if not isinstance(d["rol"], str) or d["rol"] not in ROLES:
-        raise ErrorApi(400, f"'rol' debe ser uno de: {', '.join(sorted(ROLES))}")
-    if not isinstance(d["nombre_completo"], str) or not isinstance(d["email"], str):
-        raise ErrorApi(400, "El nombre y el correo deben ser texto")
-    nombre, email = d["nombre_completo"].strip(), d["email"].strip().lower()
-    if not nombre or len(nombre) > 150 or not email or len(email) > 254 or "@" not in email:
-        raise ErrorApi(400, "El nombre o el correo no son válidos")
-    if d["rol"] == "administrador":
-        with engine.connect() as con:
-            actual = con.execute(text(
-                "SELECT rol FROM USUARIOS WHERE id_usuario = :id"),
-                {"id": session.get("id_usuario")}).scalar()
-        if actual != "administrador":
-            raise ErrorApi(403, "Solo un administrador puede asignar ese rol")
-    return {"n": nombre, "e": email, "r": d["rol"]}
 
 
 @bp.get("")
 def listar():
-    rol = request.args.get("rol")
-    with engine.connect() as con:
-        if rol:
-            res = con.execute(text("SELECT * FROM USUARIOS WHERE rol = :r ORDER BY nombre_completo"), {"r": rol})
-        else:
-            res = con.execute(text("SELECT * FROM USUARIOS ORDER BY nombre_completo"))
-        return jsonify(filas(res))
+    """Devuelve usuarios, con filtro opcional por rol."""
+    return jsonify(listar_usuarios(request.args.get("rol")))
 
 
 @bp.get("/<int:id>")
 def ver(id):
-    with engine.connect() as con:
-        return jsonify(obtener(con, "USUARIOS", "id_usuario", id))
+    """Devuelve el usuario solicitado."""
+    return jsonify(obtener_usuario(id))
 
 
 @bp.post("")
 def crear():
-    p = _validar()
-    with engine.begin() as con:
-        r = con.execute(text("INSERT INTO USUARIOS (nombre_completo, email, rol) VALUES (:n, :e, :r)"), p)
-        return jsonify(obtener(con, "USUARIOS", "id_usuario", r.lastrowid)), 201
+    """Valida y crea un usuario."""
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
+    usuario = validar_usuario(datos, session.get("id_usuario"))
+    return jsonify(crear_usuario(usuario)), 201
 
 
 @bp.put("/<int:id>")
 def actualizar(id):
-    p = _validar()
-    with engine.begin() as con:
-        obtener(con, "USUARIOS", "id_usuario", id)
-        con.execute(text(
-            "UPDATE USUARIOS SET nombre_completo=:n, email=:e, rol=:r WHERE id_usuario=:i"), {**p, "i": id})
-        return jsonify(obtener(con, "USUARIOS", "id_usuario", id))
+    """Valida y actualiza un usuario."""
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
+    usuario = validar_usuario(datos, session.get("id_usuario"))
+    return jsonify(actualizar_usuario(id, usuario))
 
 
 @bp.delete("/<int:id>")
 def eliminar(id):
-    with engine.begin() as con:
-        obtener(con, "USUARIOS", "id_usuario", id)
-        if en_uso(con, "SELECT COUNT(*) FROM PROYECTOS WHERE id_usuario = :v", id):
-            raise ErrorApi(409, "El usuario tiene proyectos asociados")
-        con.execute(text("DELETE FROM AUTORIZACIONES_DATOS WHERE id_usuario = :v"), {"v": id})
-        con.execute(text("DELETE FROM CREDENCIALES WHERE id_usuario = :v"), {"v": id})
-        con.execute(text("DELETE FROM USUARIOS WHERE id_usuario = :v"), {"v": id})
+    """Elimina el usuario si no tiene proyectos asociados."""
+    eliminar_usuario(id)
     return "", 204
