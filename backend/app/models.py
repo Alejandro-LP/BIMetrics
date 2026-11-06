@@ -1,5 +1,6 @@
 """Esquema de la base de datos (según el diagrama ER)."""
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     ForeignKey,
@@ -8,6 +9,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Table,
+    Text,
     UniqueConstraint,
 )
 
@@ -42,6 +44,19 @@ Table("PRECIOS_CIUDAD", meta,
       Column("ciudad", String(100), nullable=False),
       Column("costo_unitario", Numeric(14, 2), nullable=False),
       UniqueConstraint("id_insumo", "ciudad", name="uq_precio_insumo_ciudad"))
+Table("COTIZACIONES_MANO_OBRA", meta,
+      Column("id_cotizacion", Integer, primary_key=True, autoincrement=True),
+      Column("id_insumo", Integer, ForeignKey("INSUMOS.id_insumo", ondelete="CASCADE"), nullable=False),
+      Column("ciudad", String(100), nullable=False),
+      Column("fecha_referencia", Date, nullable=False),
+      Column("valor_minimo", Numeric(14, 2), nullable=False),
+      Column("valor_maximo", Numeric(14, 2), nullable=False),
+      Column("valor_referencial", Numeric(14, 2), nullable=False),
+      Column("fuente", String(150), nullable=False),
+      Column("fuente_url", Text, nullable=False),
+      Column("metodologia", Text, nullable=False),
+      Column("incluye_prestaciones", Boolean),
+      UniqueConstraint("id_insumo", "ciudad", name="uq_cotizacion_mano_obra_ciudad"))
 Table("DETALLE_PRESUPUESTO", meta,
       Column("id_detalle", Integer, primary_key=True, autoincrement=True),
       Column("id_presupuesto", Integer, ForeignKey("PRESUPUESTOS.id_presupuesto"), nullable=False),
@@ -55,6 +70,7 @@ TABLAS = (
     "PROYECTO_COLABORADORES",
     "INSUMOS",
     "PRECIOS_CIUDAD",
+    "COTIZACIONES_MANO_OBRA",
     "PRESUPUESTOS",
     "DETALLE_PRESUPUESTO",
 )

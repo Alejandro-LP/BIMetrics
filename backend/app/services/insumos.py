@@ -12,9 +12,15 @@ def listar_insumos(texto_busqueda="", ciudad=""):
     consulta = text(
         "SELECT i.id_insumo, i.nombre_insumo, i.unidad_medida, "
         "COALESCE(pc.costo_unitario, i.costo_unitario) AS costo_unitario, "
-        "CASE WHEN pc.id_precio IS NULL THEN 'referencia_general' ELSE 'precio_ciudad' END AS origen_precio "
+        "CASE WHEN pc.id_precio IS NULL THEN 'referencia_general' ELSE 'precio_ciudad' END AS origen_precio, "
+        "q.valor_minimo AS cotizacion_minima, q.valor_maximo AS cotizacion_maxima, "
+        "q.valor_referencial AS cotizacion_referencial, q.fecha_referencia AS fecha_cotizacion, "
+        "q.fuente AS fuente_cotizacion, q.fuente_url AS url_cotizacion, "
+        "q.metodologia AS metodologia_cotizacion, q.incluye_prestaciones AS incluye_prestaciones "
         "FROM INSUMOS i LEFT JOIN PRECIOS_CIUDAD pc "
         "ON pc.id_insumo=i.id_insumo AND pc.ciudad=:ciudad "
+        "LEFT JOIN COTIZACIONES_MANO_OBRA q "
+        "ON q.id_insumo=i.id_insumo AND q.ciudad=:ciudad "
         "WHERE i.nombre_insumo LIKE :q ORDER BY i.nombre_insumo"
     )
     with operational_engine.connect() as connection:
@@ -105,4 +111,5 @@ def eliminar_insumo(id_insumo):
         obtener(connection, "INSUMOS", "id_insumo", id_insumo)
         if en_uso(connection, "SELECT COUNT(*) FROM DETALLE_PRESUPUESTO WHERE id_insumo = :v", id_insumo):
             raise ErrorApi(409, "El insumo está en uso en algún presupuesto")
+        connection.execute(text("DELETE FROM COTIZACIONES_MANO_OBRA WHERE id_insumo=:id"), {"id": id_insumo})
         connection.execute(text("DELETE FROM INSUMOS WHERE id_insumo = :id"), {"id": id_insumo})

@@ -180,7 +180,15 @@ Para regenerar el volcado SQL desde el CSV:
 ..\.venv\Scripts\python.exe -m scripts.generar_catalogo_sql
 ```
 
-Los precios del archivo son valores de referencia y no constituyen una cotización vigente. El CSV trae precios unitarios de las partidas, pero no desglosa cuadrillas, rendimientos ni costos de contratación para todas ellas. Por eso las recomendaciones de mano de obra son orientativas: BIMetrics no inventa un costo separado donde no hay tarifa laboral registrada. Alquiler de andamios, torres, plataformas y grúa torre se vincula con su partida de montaje/desmontaje cuando existe en el catálogo.
+Los precios del archivo son valores de referencia y no constituyen una cotización vigente. El CSV trae precios unitarios de las partidas, pero no desglosa cuadrillas ni rendimientos. Para acompañar las sugerencias de mano de obra, el catálogo SQL operacional incorpora jornales de referencia por perfil y ciudad con rango, fuente, fecha y metodología; no son ofertas vinculantes ni reemplazan una cotización del contratista. Los rangos se basan en referencias públicas de mercado 2026 y se agrupan por bandas de ciudad. Revisa si incluyen prestaciones, transporte, equipos, recargos e AIU antes de usar el valor contractual.
+
+Cargar o actualizar las cotizaciones referenciales desde `backend/`:
+
+```powershell
+..\.venv\Scripts\python.exe -m scripts.cargar_cotizaciones_mano_obra
+```
+
+La carga es idempotente y escribe los perfiles sugeridos en `INSUMOS`, el precio aplicado por ciudad en `PRECIOS_CIUDAD` y el rango auditable en `COTIZACIONES_MANO_OBRA`. La interfaz muestra el rango, el valor usado, el método y el enlace a la fuente. Las sugerencias marcadas como condicionales aparecen desmarcadas para que el usuario confirme que el alcance requiere ese perfil. Las cantidades iniciales son un jornal por perfil y deben reemplazarse por cantidades y rendimientos del APU real. Entre las referencias consultadas están [tarifas de mano de obra por oficio y ciudad de Obra Maestra](https://obramaestra.com/co/guias/cuanto-cobrar-mano-de-obra-construccion-colombia) y [APU público de instalación metálica de Soluciones Excel](https://www.solucionesexcel.com/apu/2741-instalacion-nave-puerta-lamina/).
 
 ### Importación de cómputos TXT desde Revit y Archicad
 
