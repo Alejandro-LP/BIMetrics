@@ -54,7 +54,10 @@ def _crear_o_buscar_insumo_de_partida(connection, partida, ciudad, variacion=Non
     if id_precio is None:
         connection.execute(
             text("INSERT INTO PRECIOS_CIUDAD (id_insumo, ciudad, costo_unitario) VALUES (:id, :ciudad, :precio)"),
-            {"id": id_insumo, "ciudad": ciudad, "precio": precio_catalogo},
+            # Raw text() statements do not apply SQLAlchemy's Numeric bind processor.
+            # SQLite cannot bind Decimal directly; decimal text preserves cents and
+            # is safely converted by the NUMERIC-affinity column.
+            {"id": id_insumo, "ciudad": ciudad, "precio": str(precio_catalogo)},
         )
     return id_insumo
 
