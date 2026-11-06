@@ -1,6 +1,6 @@
 """Modelo ORM del catálogo maestro almacenado en MySQL."""
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .extensions import db
@@ -23,6 +23,13 @@ class Partida(db.Model):
         passive_deletes=True,
         order_by="VariacionOpcion.id",
     )
+    recomendaciones_mano_obra = relationship(
+        "RecomendacionManoObra",
+        back_populates="partida",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="RecomendacionManoObra.prioridad",
+    )
 
 
 class VariacionOpcion(db.Model):
@@ -43,3 +50,25 @@ class VariacionOpcion(db.Model):
     precio = db.Column(Numeric(14, 2))
 
     partida = relationship("Partida", back_populates="variaciones")
+
+
+class RecomendacionManoObra(db.Model):
+    """Perfil laboral sugerido para una actividad, con respaldo y condición."""
+
+    __tablename__ = "recomendaciones_mano_obra"
+    __table_args__ = (
+        UniqueConstraint("codigo", "perfil", name="uq_recomendacion_mano_obra_partida_perfil"),
+        {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"},
+    )
+
+    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    codigo = db.Column(
+        String(50), ForeignKey("partidas.codigo", ondelete="CASCADE"), nullable=False, index=True
+    )
+    perfil = db.Column(String(150), nullable=False)
+    tipo = db.Column(String(20), nullable=False, default="sugerido")
+    fundamento = db.Column(Text, nullable=False)
+    fuente_url = db.Column(String(500), nullable=False)
+    prioridad = db.Column(Integer, nullable=False, default=0)
+
+    partida = relationship("Partida", back_populates="recomendaciones_mano_obra")

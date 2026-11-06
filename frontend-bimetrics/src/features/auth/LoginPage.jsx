@@ -62,25 +62,29 @@ function LoginPage({ mode = 'login' }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegister && (
-              <>
-                <label className="block text-sm font-medium text-slate-300" htmlFor="full-name">Nombre completo</label>
-                <input id="full-name" name="nombre_completo" type="text" autoComplete="name" minLength={2} maxLength={150} required value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" className={inputClass} />
-              </>
+              <label className="block text-sm font-medium text-slate-300" htmlFor="full-name">
+                Nombre completo
+                <input id="full-name" name="nombre_completo" type="text" autoComplete="name" minLength={2} maxLength={150} required value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" className={`${inputClass} mt-2`} />
+              </label>
             )}
-            <label className="block text-sm font-medium text-slate-300" htmlFor="email">Correo electrónico</label>
-            <input id="email" name="email" type="email" autoComplete="email" maxLength={150} required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nombre@empresa.com" className={inputClass} />
+            <label className="block text-sm font-medium text-slate-300" htmlFor="email">
+              Correo electrónico
+              <input id="email" name="email" type="email" autoComplete="email" maxLength={150} required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nombre@empresa.com" className={`${inputClass} mt-2`} />
+            </label>
             {isRegister && (
-              <>
-                <label className="block text-sm font-medium text-slate-300" htmlFor="role">Tipo de cuenta</label>
-                <select id="role" name="rol" value={role} onChange={(event) => setRole(event.target.value)} className={`${inputClass} glass-select`}>
+              <label className="block text-sm font-medium text-slate-300" htmlFor="role">
+                Tipo de cuenta
+                <select id="role" name="rol" value={role} onChange={(event) => setRole(event.target.value)} className={`${inputClass} glass-select mt-2`}>
                   <option value="arquitecto">Arquitecto</option>
                   <option value="ingeniero">Ingeniero</option>
                   <option value="cliente">Cliente · solo consulta</option>
                 </select>
-              </>
+              </label>
             )}
-            <label className="block text-sm font-medium text-slate-300" htmlFor="password">Contraseña</label>
-            <input id="password" name="password" type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength={isRegister ? 10 : undefined} maxLength={128} required value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isRegister ? 'Mínimo 10 caracteres' : 'Tu contraseña'} className={inputClass} />
+            <label className="block text-sm font-medium text-slate-300" htmlFor="password">
+              Contraseña
+              <input id="password" name="password" type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength={isRegister ? 10 : undefined} maxLength={128} required value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isRegister ? 'Mínimo 10 caracteres' : 'Tu contraseña'} className={`${inputClass} mt-2`} />
+            </label>
             {isRegister && (
               <label className="flex items-start gap-2.5 text-xs leading-5 text-slate-400">
                 <input type="checkbox" name="autoriza_datos" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} required className="mt-1 accent-indigo-400" />

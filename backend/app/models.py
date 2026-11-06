@@ -27,7 +27,10 @@ Table("PRESUPUESTOS", meta,
       Column("id_presupuesto", Integer, primary_key=True, autoincrement=True),
       Column("id_proyecto", Integer, ForeignKey("PROYECTOS.id_proyecto"), nullable=False),
       Column("fecha_calculo", Date, nullable=False),
-      Column("costo_total", Numeric(14, 2), default=0))
+      Column("costo_total", Numeric(14, 2), default=0),
+      Column("porcentaje_administracion", Numeric(5, 2), nullable=False, default=0),
+      Column("porcentaje_imprevistos", Numeric(5, 2), nullable=False, default=0),
+      Column("porcentaje_utilidad", Numeric(5, 2), nullable=False, default=0))
 Table("INSUMOS", meta,
       Column("id_insumo", Integer, primary_key=True, autoincrement=True),
       Column("nombre_insumo", String(150), nullable=False, unique=True),

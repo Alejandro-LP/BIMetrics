@@ -30,10 +30,18 @@ def create_app():
         raise RuntimeError("Configura SECRET_KEY con un valor aleatorio y privado antes de iniciar la aplicación.")
     app = Flask(__name__)
     app.secret_key = SECRET_KEY
+    session_cookie_secure = os.getenv("SESSION_COOKIE_SECURE", "0") == "1"
+    production = os.getenv("BIMETRICS_ENV", "development").strip().lower() == "production"
+    if production and not session_cookie_secure:
+        raise RuntimeError("En producción configura SESSION_COOKIE_SECURE=1 y sirve la aplicación mediante HTTPS.")
+    if production and len(SECRET_KEY) < 32:
+        raise RuntimeError("En producción SECRET_KEY debe tener al menos 32 caracteres aleatorios.")
     app.config.update(
         SQLALCHEMY_DATABASE_URI=CATALOG_DATABASE_URL,
         SQLALCHEMY_ENGINE_OPTIONS={"pool_pre_ping": True},
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        # Cota global de solicitudes; permite archivos TXT de hasta 5 MB más multipart.
+        MAX_CONTENT_LENGTH=6 * 1024 * 1024,
         MONGO_URI=MONGO_URI,
         MONGO_DNS_SERVERS=MONGO_DNS_SERVERS,
         MONGO_USERS_DB=MONGO_DB_NAME,
@@ -41,13 +49,23 @@ def create_app():
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         # Vite local runs use HTTP; deployments must set this to 1 behind HTTPS.
-        SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
+        SESSION_COOKIE_SECURE=session_cookie_secure,
     )
     app.json.ensure_ascii = False
     db.init_app(app)
     init_mongo(app)
     try:
         meta.create_all(operational_engine)
+        columnas_presupuesto = {column["name"] for column in inspect(operational_engine).get_columns("PRESUPUESTOS")}
+        columnas_aiu = {
+            "porcentaje_administracion": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
+            "porcentaje_imprevistos": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
+            "porcentaje_utilidad": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
+        }
+        with operational_engine.begin() as con:
+            for columna, tipo in columnas_aiu.items():
+                if columna not in columnas_presupuesto:
+                    con.execute(text(f"ALTER TABLE PRESUPUESTOS ADD COLUMN {columna} {tipo}"))
         if "ciudad" not in {column["name"] for column in inspect(operational_engine).get_columns("PROYECTOS")}:
             with operational_engine.begin() as con:
                 con.execute(text("ALTER TABLE PROYECTOS ADD COLUMN ciudad VARCHAR(100)"))
@@ -74,7 +92,7 @@ def create_app():
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
             origin = request.headers.get("Origin")
             allowed_origins = {item.strip() for item in CORS_ORIGIN.split(",") if item.strip()}
-            if origin and origin not in allowed_origins:
+            if not origin or origin not in allowed_origins:
                 return jsonify(error="Origen no permitido"), 403
         publico = (
             request.path == "/api/salud"

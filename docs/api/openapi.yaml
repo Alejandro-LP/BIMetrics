@@ -1,0 +1,839 @@
+openapi: 3.1.0
+info:
+  title: BIMetrics API
+  version: 1.0.0
+  description: >-
+    API para proyectos, presupuestos, catálogo y actividad BIM. Las rutas privadas
+    usan una cookie de sesión Flask. Las solicitudes de escritura requieren un
+    encabezado Origin permitido por CORS_ORIGIN.
+servers:
+  - url: http://127.0.0.1:5000/api
+    description: Desarrollo local
+tags:
+  - name: Salud
+  - name: Autenticación
+  - name: Dashboard
+  - name: Proyectos
+  - name: Presupuestos
+  - name: Insumos
+  - name: Partidas
+  - name: Actividad BIM
+  - name: Usuarios
+paths:
+  /salud:
+    get:
+      tags: [Salud]
+      summary: Comprueba que la API está activa
+      security: []
+      responses:
+        '200':
+          description: Servicio activo
+  /salud/mongodb:
+    get:
+      tags: [Salud]
+      summary: Comprueba la conexión a MongoDB
+      security: []
+      responses:
+        '200':
+          description: MongoDB respondió al ping
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/registro:
+    post:
+      tags: [Autenticación]
+      summary: Registra una cuenta y crea sesión
+      description: El registro público admite los roles arquitecto, ingeniero y cliente; no permite autoasignarse administrador.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Registro'
+      responses:
+        '201':
+          description: Cuenta creada
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Inicia sesión
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Sesión iniciada; el servidor establece la cookie de sesión
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/sesion:
+    get:
+      tags: [Autenticación]
+      summary: Devuelve el usuario de la sesión actual
+      responses:
+        '200': { description: Perfil autenticado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/perfil:
+    put:
+      tags: [Autenticación]
+      summary: Actualiza el nombre o correo del usuario autenticado
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre_completo, email, current_password]
+              properties:
+                nombre_completo: { type: string, minLength: 2, maxLength: 150 }
+                email: { type: string, format: email }
+                current_password: { type: string, format: password }
+                new_password: { type: string, format: password, minLength: 10, maxLength: 128 }
+      responses:
+        '200': { description: Perfil actualizado }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/preferencias:
+    get:
+      tags: [Autenticación]
+      summary: Consulta preferencias del usuario autenticado
+      responses:
+        '200': { description: Preferencias del usuario }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [Autenticación]
+      summary: Reemplaza preferencias del usuario autenticado
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferencias]
+              properties:
+                preferencias: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Preferencias guardadas }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Cierra la sesión actual
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200': { description: Sesión cerrada }
+  /dashboard/resumen:
+    get:
+      tags: [Dashboard]
+      summary: Obtiene el resumen SQL y la actividad BIM del usuario
+      responses:
+        '200': { description: Resumen con cantidad de partidas base y variaciones desde el catálogo SQL, métricas operativas y actividad BIM de MongoDB }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /proyectos:
+    get:
+      tags: [Proyectos]
+      summary: Lista proyectos propios y compartidos
+      responses:
+        '200': { description: Lista de proyectos visibles }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Proyectos]
+      summary: Crea un proyecto
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre_obra]
+              properties:
+                nombre_obra: { type: string, maxLength: 150 }
+                ciudad: { type: string }
+      responses:
+        '201': { description: Proyecto creado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /proyectos/{id}/presupuestos:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Proyectos]
+      summary: Lista el historial presupuestario del proyecto
+      responses:
+        '200': { description: Historial del proyecto accesible }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /proyectos/{id}/colaboradores:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Proyectos]
+      summary: Invita un colaborador al proyecto
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '201': { description: Colaborador agregado }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /proyectos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    delete:
+      tags: [Proyectos]
+      summary: Elimina un proyecto propio
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204': { description: Proyecto eliminado }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos:
+    get:
+      tags: [Presupuestos]
+      summary: Lista presupuestos accesibles
+      parameters:
+        - in: query
+          name: id_proyecto
+          schema: { type: integer }
+      responses:
+        '200': { description: Lista de presupuestos }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Presupuestos]
+      summary: Crea un presupuesto para un proyecto accesible
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_proyecto]
+              properties:
+                id_proyecto: { type: integer, minimum: 1 }
+                detalle:
+                  type: array
+                  items: { type: object }
+                aiu:
+                  $ref: '#/components/schemas/AIU'
+      responses:
+        '201': { description: Presupuesto creado y calculado }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /insumos:
+    get:
+      tags: [Insumos]
+      summary: Busca insumos del catálogo operativo
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: ciudad
+          schema: { type: string }
+      responses:
+        '200': { description: Insumos coincidentes }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Insumos]
+      summary: Crea insumo o precio local
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre_insumo, unidad_medida, costo_unitario]
+              properties:
+                nombre_insumo: { type: string }
+                unidad_medida: { type: string }
+                costo_unitario: { type: number, minimum: 0 }
+      responses:
+        '201': { description: Insumo creado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /insumos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Insumos]
+      summary: Obtiene un insumo
+      responses:
+        '200': { description: Insumo encontrado }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Insumos]
+      summary: Actualiza un insumo
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Insumo' }
+      responses:
+        '200': { description: Insumo actualizado }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Insumos]
+      summary: Elimina un insumo que no esté en uso
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204': { description: Insumo eliminado }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /partidas:
+    get:
+      tags: [Partidas]
+      summary: Lista partidas del catálogo maestro SQL
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200': { description: Página del catálogo }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      tags: [Partidas]
+      summary: Crea partida con variaciones (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Partida' }
+      responses:
+        '201': { description: Partida creada }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /partidas/buscar:
+    get:
+      tags: [Partidas]
+      summary: Busca partidas por código o descripción
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200': { description: Partidas coincidentes }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /partidas/{codigo}:
+    parameters:
+      - in: path
+        name: codigo
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Partidas]
+      summary: Obtiene una partida y sus variaciones
+      responses:
+        '200': { description: Detalle de la partida }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Partidas]
+      summary: Actualiza partida y reemplaza variaciones si se envían (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Partida'
+                - type: object
+                  properties:
+                    codigo: { readOnly: true }
+      responses:
+        '200': { description: Partida actualizada }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Partidas]
+      summary: Elimina partida y sus variaciones (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204': { description: Partida eliminada }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /actividades-bim:
+    post:
+      tags: [Actividad BIM]
+      summary: Registra actividad BIM del usuario autenticado
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActividadBIM'
+      responses:
+        '201': { description: Actividad registrada en MongoDB }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /actividades-bim/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, pattern: '^[0-9a-fA-F]{24}$' }
+    get:
+      tags: [Actividad BIM]
+      summary: Consulta una actividad BIM visible para la sesión
+      responses:
+        '200': { description: Actividad encontrada }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Actividad BIM]
+      summary: Actualiza campos permitidos de una actividad propia
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                tipo_evento: { type: string, maxLength: 100 }
+                software_origen: { type: string, maxLength: 120 }
+                nombre_archivo: { type: string, maxLength: 255 }
+                estado: { type: string, enum: [completado, advertencia, fallido] }
+                id_proyecto: { type: [integer, 'null'], minimum: 1 }
+                detalles_bim: { type: object, description: Objeto JSON flexible de hasta 1 MB }
+      responses:
+        '200': { description: Actividad actualizada }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Actividad BIM]
+      summary: Elimina una actividad propia
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200': { description: Actividad eliminada }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /actividades-bim/usuario/{id_usuario}:
+    get:
+      tags: [Actividad BIM]
+      summary: Consulta perfil e historial reciente autorizado
+      parameters:
+        - in: path
+          name: id_usuario
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: limite
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200': { description: Perfil y actividades recientes }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Presupuestos]
+      summary: Obtiene presupuesto y detalle
+      responses:
+        '200': { description: Presupuesto accesible }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/excel:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Presupuestos]
+      summary: Descarga presupuesto en Excel XLSX
+      responses:
+        '200':
+          description: Archivo XLSX
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {}
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/pdf:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Presupuestos]
+      summary: Descarga el presupuesto en PDF (sin firma digital certificada)
+      responses:
+        '200':
+          description: Archivo PDF
+          content:
+            application/pdf: {}
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /presupuestos/{id}/word:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Presupuestos]
+      summary: Descarga el presupuesto en Word editable (sin firma digital certificada)
+      responses:
+        '200':
+          description: Archivo Word
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: {}
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /presupuestos/{id}/aiu:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Presupuestos]
+      summary: Actualiza porcentajes AIU y recalcula el presupuesto
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [aiu]
+              properties:
+                aiu:
+                  $ref: '#/components/schemas/AIU'
+      responses:
+        '200': { description: Presupuesto actualizado con desglose AIU }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/detalle:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Presupuestos]
+      summary: Añade un insumo y opcionalmente mano de obra al presupuesto
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_insumo, cantidad]
+              properties:
+                id_insumo: { type: integer, minimum: 1 }
+                cantidad: { type: number, exclusiveMinimum: 0 }
+                lineas_mano_obra:
+                  type: array
+                  items:
+                    type: object
+                    required: [id_insumo, cantidad]
+                    properties:
+                      id_insumo: { type: integer, minimum: 1 }
+                      cantidad: { type: number, exclusiveMinimum: 0 }
+      responses:
+        '201': { description: Línea o líneas añadidas y presupuesto recalculado }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/partidas:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Presupuestos]
+      summary: Agrega una partida del catálogo SQL al presupuesto con su precio vigente
+      description: No acepta precios proporcionados por el cliente. Puede incluir recursos de mano de obra y agrega perfiles asociados a equipos cuando corresponde.
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo, cantidad]
+              properties:
+                codigo: { type: string, maxLength: 50 }
+                variacion_id: { type: integer, minimum: 1, nullable: true }
+                cantidad: { type: number, exclusiveMinimum: 0 }
+                lineas_mano_obra:
+                  type: array
+                  items:
+                    type: object
+                    required: [id_insumo, cantidad]
+                    properties:
+                      id_insumo: { type: integer, minimum: 1 }
+                      cantidad: { type: number, exclusiveMinimum: 0 }
+      responses:
+        '201': { description: Partida agregada usando el precio determinado por el servidor }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/importar-txt/analizar:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Presupuestos]
+      summary: Analiza un archivo tabulado TXT exportado desde Revit o Archicad
+      description: Límite de 5 MB y 1000 filas. Devuelve coincidencias sugeridas del catálogo SQL. El análisis no modifica el presupuesto; cada fila debe agregarse luego mediante /partidas.
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo, software]
+              properties:
+                archivo: { type: string, format: binary }
+                software: { type: string, enum: [revit, archicad] }
+      responses:
+        '200': { description: Filas reconocidas con hasta tres partidas candidatas del catálogo SQL }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/detalle/{detalle_id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - in: path
+        name: detalle_id
+        required: true
+        schema: { type: integer, minimum: 1 }
+    delete:
+      tags: [Presupuestos]
+      summary: Elimina una línea y recalcula el presupuesto
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200': { description: Detalle actualizado }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/calcular:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Presupuestos]
+      summary: Recalcula el costo directo del presupuesto
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '200': { description: Total recalculado }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/duplicar:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Presupuestos]
+      summary: Duplica el presupuesto con precios actuales del destino
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id_proyecto: { type: integer, minimum: 1 }
+      responses:
+        '201': { description: Copia creada }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /usuarios:
+    get:
+      tags: [Usuarios]
+      summary: Lista usuarios (solo administradores)
+      parameters:
+        - in: query
+          name: rol
+          schema: { type: string, enum: [cliente, arquitecto, ingeniero, administrador] }
+      responses:
+        '200': { description: Perfiles públicos }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Usuarios]
+      summary: Crea usuario (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UsuarioAdmin' }
+      responses:
+        '201': { description: Usuario creado; la respuesta nunca incluye su hash }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /usuarios/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Usuarios]
+      summary: Obtiene perfil público (solo administradores)
+      responses:
+        '200': { description: Perfil sin credenciales ni hash }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Usuarios]
+      summary: Actualiza perfil y opcionalmente contraseña (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/UsuarioAdmin'
+                - type: object
+                  properties:
+                    password: { type: string, format: password, minLength: 10, maxLength: 128 }
+      responses:
+        '200': { description: Usuario actualizado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Usuarios]
+      summary: Elimina usuario sin proyectos (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      responses:
+        '204': { description: Usuario eliminado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+components:
+  schemas:
+    AIU:
+      type: object
+      description: Porcentajes sobre el costo directo. Cada valor debe estar entre 0 y 100; el servidor redondea cada componente monetario a dos decimales.
+      properties:
+        administracion: { type: number, minimum: 0, maximum: 100, default: 0 }
+        imprevistos: { type: number, minimum: 0, maximum: 100, default: 0 }
+        utilidad: { type: number, minimum: 0, maximum: 100, default: 0 }
+      additionalProperties: false
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Cookie firmada de sesión Flask, emitida al registrarse o iniciar sesión.
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Origin:
+      in: header
+      name: Origin
+      required: true
+      schema: { type: string, format: uri }
+      description: Debe coincidir con uno de los orígenes definidos en CORS_ORIGIN.
+    Registro:
+      type: object
+      required: [nombre_completo, email, password, rol, autoriza_datos]
+      properties:
+        nombre_completo: { type: string, minLength: 2, maxLength: 150 }
+        email: { type: string, format: email, maxLength: 150 }
+        password: { type: string, format: password, minLength: 10, maxLength: 128 }
+        rol: { type: string, enum: [arquitecto, ingeniero, cliente] }
+        autoriza_datos: { type: boolean, const: true }
+    ActividadBIM:
+      type: object
+      required: [id_usuario, tipo_evento]
+      properties:
+        id_usuario: { type: integer, minimum: 1 }
+        id_proyecto: { type: [integer, 'null'], minimum: 1 }
+        tipo_evento: { type: string, maxLength: 100 }
+        software_origen: { type: string, maxLength: 120 }
+        nombre_archivo: { type: string, maxLength: 255 }
+        estado: { type: string, enum: [completado, advertencia, fallido] }
+        detalles_bim: { type: object, description: Objeto JSON flexible, máximo 1 MB }
+    Insumo:
+      type: object
+      required: [nombre_insumo, unidad_medida, costo_unitario]
+      properties:
+        nombre_insumo: { type: string, minLength: 1, maxLength: 150 }
+        unidad_medida: { type: string, minLength: 1, maxLength: 30 }
+        costo_unitario: { type: number, minimum: 0 }
+        ciudad: { type: string, maxLength: 100 }
+    Partida:
+      type: object
+      required: [codigo, unidad, descripcion]
+      properties:
+        codigo: { type: string, minLength: 1, maxLength: 50 }
+        unidad: { type: string, minLength: 1, maxLength: 50 }
+        descripcion: { type: string, minLength: 1, maxLength: 10000 }
+        precio_defecto: { type: number, minimum: 0, default: 0 }
+        variaciones:
+          type: array
+          items:
+            type: object
+            required: [tipo]
+            properties:
+              tipo: { type: string, minLength: 1, maxLength: 100 }
+              opcion: { type: [string, 'null'] }
+              parametro: { type: [string, 'null'], maxLength: 255 }
+              valor_probado: { type: [string, 'null'], maxLength: 255 }
+              es_defecto: { type: boolean, default: false }
+              precio: { type: [number, 'null'], minimum: 0 }
+    UsuarioAdmin:
+      type: object
+      required: [nombre_completo, email, rol, password]
+      properties:
+        nombre_completo: { type: string, minLength: 1, maxLength: 150 }
+        email: { type: string, format: email }
+        rol: { type: string, enum: [cliente, arquitecto, ingeniero, administrador] }
+        password: { type: string, format: password, minLength: 10, maxLength: 128 }
+  responses:
+    BadRequest:
+      description: Solicitud o datos inválidos
+    Unauthorized:
+      description: Se requiere una sesión válida
+    Forbidden:
+      description: El rol o el origen no tiene permiso
+    NotFound:
+      description: Recurso no encontrado o no accesible
+    Conflict:
+      description: El recurso entra en conflicto con datos existentes
+    Unavailable:
+      description: Una base de datos requerida no está disponible
+security:
+  - sessionCookie: []

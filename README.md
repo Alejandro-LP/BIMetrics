@@ -19,9 +19,10 @@ Aplicación web para gestionar proyectos y presupuestos de obra, consultar un ca
 
 - Administración de proyectos, presupuestos e insumos.
 - Catálogo SQL de partidas, variaciones y precios de referencia.
-- Sugerencias de mano de obra a partir de la descripción de los insumos y las tarifas disponibles para la ciudad.
+- Sugerencias de mano de obra para cada partida: reglas por actividad y recomendación general de oficial y ayudante cuando no hay una regla específica. Los recursos con tarifa local se agregan al presupuesto; las partidas de alquiler de equipo con un montaje explícito asociado enlazan ambas actividades.
 - Registro de usuarios, preferencias y actividad BIM.
 - Dashboard que reúne información SQL y MongoDB.
+- Los conteos del dashboard salen de las tablas SQL de partidas y variaciones; si MySQL no responde, usa los conteos del CSV local y señala que son una copia de respaldo.
 - Validación de acceso a proyectos y propiedad de las actividades.
 
 ## Arquitectura
@@ -84,7 +85,7 @@ MONGO_ACTIVITY_DB_NAME=bimetrics_nosql
 CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-`SESSION_COOKIE_SECURE=0` es para desarrollo local por HTTP. En producción configura HTTPS y establece el valor en `1`. Si la contraseña de MongoDB contiene caracteres reservados de URI, codifícala correctamente. No compartas ni subas `.env`.
+`SESSION_COOKIE_SECURE=0` es para desarrollo local por HTTP. En producción configura HTTPS y establece `BIMETRICS_ENV=production` y `SESSION_COOKIE_SECURE=1`; la API se negará a iniciar si producción no tiene cookie segura o `SECRET_KEY` de al menos 32 caracteres. Si la contraseña de MongoDB contiene caracteres reservados de URI, codifícala correctamente. No compartas ni subas `.env`.
 
 Variables principales:
 
@@ -106,13 +107,13 @@ Para MySQL también puedes configurar `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, 
 
 ### Opción A: iniciar frontend y backend juntos
 
-Desde la raíz:
+Desde la raíz, con `.venv` activado en PowerShell:
 
 ```powershell
-\.venv\Scripts\python.exe start.py
+npm run dev
 ```
 
-Abre el frontend en `http://localhost:5173`. La API estará en `http://127.0.0.1:5000`. Para detener ambos procesos, pulsa `Ctrl+C` en la terminal.
+El comando inicia Flask y Vite en la misma terminal. Abre el frontend en `http://localhost:5173`; la API estará en `http://127.0.0.1:5000`. Para detener ambos procesos, pulsa `Ctrl+C`. También puedes iniciar el mismo lanzador con `python start.py`.
 
 ### Opción B: iniciar cada servicio por separado
 
@@ -179,7 +180,11 @@ Para regenerar el volcado SQL desde el CSV:
 ..\.venv\Scripts\python.exe -m scripts.generar_catalogo_sql
 ```
 
-Los precios del archivo son valores de referencia y no constituyen una cotización vigente. Las sugerencias de mano de obra son orientativas; la aplicación no calcula rendimientos ni costos completos de contratación.
+Los precios del archivo son valores de referencia y no constituyen una cotización vigente. El CSV trae precios unitarios de las partidas, pero no desglosa cuadrillas, rendimientos ni costos de contratación para todas ellas. Por eso las recomendaciones de mano de obra son orientativas: BIMetrics no inventa un costo separado donde no hay tarifa laboral registrada. Alquiler de andamios, torres, plataformas y grúa torre se vincula con su partida de montaje/desmontaje cuando existe en el catálogo.
+
+### Importación de cómputos TXT desde Revit y Archicad
+
+En **Proyectos y presupuestos**, selecciona un presupuesto y pulsa **Importar TXT BIM**. Elige Revit o Archicad, carga un TXT tabulado exportado desde una planificación/tabla y revisa las coincidencias sugeridas por el catálogo SQL. La aplicación reconoce columnas de elemento o tipo y cantidad/conteo, admite UTF-8, UTF-16 y Windows-1252, y limita el archivo a 5 MB y 1000 filas. Cada fila se agrega manualmente tras revisar la partida sugerida. Los precios del TXT se ignoran: el servidor toma el precio de la partida/variación SQL. Los cambios de precios y el mantenimiento de insumos quedan restringidos a administradores.
 
 ### Datos de demostración y migraciones
 
@@ -189,7 +194,7 @@ Hay scripts de migración para instalaciones anteriores. Revisa cuidadosamente s
 
 ## API principal
 
-Las rutas de negocio requieren sesión, excepto las rutas de salud y registro/login.
+Las rutas de negocio requieren sesión, excepto las rutas de salud y registro/login. Todas las solicitudes que cambian datos deben enviar un encabezado `Origin` permitido por `CORS_ORIGIN`; las solicitudes sin ese encabezado se rechazan para reducir el riesgo de CSRF.
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -200,17 +205,28 @@ Las rutas de negocio requieren sesión, excepto las rutas de salud y registro/lo
 | `GET` | `/api/auth/sesion` | Consulta la sesión actual. |
 | `POST` | `/api/auth/logout` | Cierra sesión. |
 | `GET` | `/api/dashboard/resumen` | Combina métricas SQL con perfil y actividad MongoDB. |
+| `POST` | `/api/presupuestos/{id}/partidas` | Agrega una partida del catálogo SQL con el precio asignado por el servidor. |
+| `POST` | `/api/presupuestos/{id}/importar-txt/analizar` | Analiza un TXT tabulado de Revit o Archicad y devuelve sugerencias SQL sin modificar el presupuesto. |
 | `POST` | `/api/actividades-bim` | Registra una actividad BIM en MongoDB. |
 | `GET` | `/api/actividades-bim/<id>` | Consulta una actividad propia. |
 | `PUT` | `/api/actividades-bim/<id>` | Actualiza campos permitidos de una actividad propia. |
 | `DELETE` | `/api/actividades-bim/<id>` | Elimina una actividad propia. |
 | `GET` | `/api/actividades-bim/usuario/<id>?limite=10` | Consulta el perfil y actividad reciente del usuario autorizado. |
 | `GET` | `/api/partidas` | Consulta el catálogo SQL de partidas. |
+| `POST` | `/api/partidas` | Crea una partida del catálogo maestro; solo para administradores. |
+| `PUT`, `DELETE` | `/api/partidas/<codigo>` | Actualiza o elimina una partida; solo para administradores. |
+| `GET` | `/api/presupuestos/<id>/pdf` | Descarga una exportación PDF del presupuesto, sin firma digital certificada. |
+| `GET` | `/api/presupuestos/<id>/word` | Descarga DOCX editable, sin firma digital certificada. |
+| `PUT` | `/api/presupuestos/<id>/aiu` | Actualiza administración, imprevistos y utilidad sobre costo directo; valores de 0 a 100. |
 | — | `/api/proyectos`, `/api/presupuestos`, `/api/insumos` | Gestión de entidades operativas SQL. |
 
 El CRUD documental valida los campos y comprueba la propiedad del documento. El endpoint mixto principal es `/api/dashboard/resumen`.
 
+Los porcentajes AIU se definen para cada presupuesto y se aplican al costo directo. No se fijan tasas por defecto ni se presentan como tarifas legales: deben corresponder a las condiciones de cada obra y contrato. Los formatos PDF y Word incluyen el desglose; ninguno queda firmado digitalmente.
+
 ## Pruebas y calidad
+
+El contrato OpenAPI en `docs/api/openapi.yaml` se valida en CI con `openapi-spec-validator`. El flujo ejecuta además `pip-audit` y `npm audit`; consulta el resultado del workflow de GitHub Actions para el estado vigente de dependencias. La comprobación a Atlas es externa a CI y debe ejecutarse desde el entorno de despliegue con su URI secreta configurada.
 
 Ejecutar las pruebas del backend desde `backend/`:
 
@@ -256,6 +272,8 @@ Revisa el servicio MySQL, host, puerto, usuario, contraseña y nombre de la base
 
 ## Documentación
 
+- [Contrato OpenAPI](docs/api/openapi.yaml)
+- [API y control de acceso](docs/arquitectura/api-y-control-acceso.md)
 - [Arquitectura de persistencia políglota](docs/arquitectura/persistencia-poliglota.md)
 - [Diagrama del esquema SQL](docs/diagramas/esquema_presupuestos_lucidchart.csv)
 - [Justificación de persistencia NoSQL (PDF)](docs/entregables/justificacion_persistencia_poliglota.pdf)
@@ -264,5 +282,5 @@ Revisa el servicio MySQL, host, puerto, usuario, contraseña y nombre de la base
 
 - No subas `.env`, URI de MongoDB ni credenciales al repositorio.
 - Usa una clave `SECRET_KEY` privada y aleatoria.
-- En producción, sirve la aplicación mediante HTTPS y activa `SESSION_COOKIE_SECURE=1`.
+- En producción, define `BIMETRICS_ENV=production`, sirve mediante HTTPS y activa `SESSION_COOKIE_SECURE=1`.
 - Restringe el acceso de red de Atlas a las IP necesarias.

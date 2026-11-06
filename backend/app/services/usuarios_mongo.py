@@ -122,7 +122,7 @@ def listar_usuarios(rol=None):
     return [_publico(documento) for documento in cursor]
 
 
-def crear_o_actualizar_admin(datos, id_usuario=None):
+def crear_o_actualizar_admin(datos, id_usuario=None, password_hash=None):
     """Crea o actualiza usuarios desde el módulo administrativo."""
     coleccion = _coleccion()
     email = datos["e"]
@@ -134,11 +134,13 @@ def crear_o_actualizar_admin(datos, id_usuario=None):
             {"_id": "id_usuario"}, {"$inc": {"valor": 1}}, upsert=True,
             return_document=ReturnDocument.AFTER,
         )
-        documento = {**cambios, "id_usuario": secuencia["valor"], "password_hash": None, "preferencias": {},
+        documento = {**cambios, "id_usuario": secuencia["valor"], "password_hash": password_hash, "preferencias": {},
             "autorizacion_datos": {"aceptada": True, "version": "admin"},
             "fecha_creacion": datetime.now(timezone.utc)}
         coleccion.insert_one(documento)
         return _publico(documento)
+    if password_hash:
+        cambios["password_hash"] = password_hash
     actualizado = coleccion.find_one_and_update(
         {"id_usuario": int(id_usuario)}, {"$set": cambios}, return_document=ReturnDocument.AFTER
     )

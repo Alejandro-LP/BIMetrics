@@ -19,7 +19,7 @@ def _serializar_variacion(variacion):
     }
 
 
-def serializar_partida(partida, incluir_variaciones=False):
+def serializar_partida(partida, incluir_variaciones=False, incluir_mano_obra=False):
     resultado = {
         "codigo": partida.codigo,
         "unidad": partida.unidad,
@@ -28,6 +28,16 @@ def serializar_partida(partida, incluir_variaciones=False):
     }
     if incluir_variaciones:
         resultado["variaciones"] = [_serializar_variacion(item) for item in partida.variaciones]
+    if incluir_mano_obra:
+        resultado["recomendaciones_mano_obra"] = [
+            {
+                "perfil": item.perfil,
+                "tipo": item.tipo,
+                "fundamento": item.fundamento,
+                "fuente_url": item.fuente_url,
+            }
+            for item in partida.recomendaciones_mano_obra
+        ]
     return resultado
 
 
@@ -42,17 +52,21 @@ def buscar_partidas(texto, limit=50, offset=0):
     partidas = db.session.scalars(
         select(Partida)
         .where(or_(Partida.codigo.ilike(f"%{texto}%"), Partida.descripcion.ilike(f"%{texto}%")))
+        .options(selectinload(Partida.recomendaciones_mano_obra))
         .order_by(Partida.codigo)
         .limit(limit)
         .offset(offset)
     ).all()
-    return [serializar_partida(partida) for partida in partidas]
+    return [serializar_partida(partida, incluir_mano_obra=True) for partida in partidas]
 
 
 def obtener_partida(codigo):
     partida = db.session.scalar(
         select(Partida)
         .where(Partida.codigo == codigo)
-        .options(selectinload(Partida.variaciones))
+        .options(
+            selectinload(Partida.variaciones),
+            selectinload(Partida.recomendaciones_mano_obra),
+        )
     )
-    return serializar_partida(partida, incluir_variaciones=True) if partida else None
+    return serializar_partida(partida, incluir_variaciones=True, incluir_mano_obra=True) if partida else None

@@ -30,6 +30,7 @@ def app_cliente(mongo_store):
     mongo_store["users"]["usuarios"].insert_one(usuario)
     app = create_app()
     cliente = app.test_client()
+    cliente.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
     with cliente.session_transaction() as sesion:
         sesion["id_usuario"] = 101
     return cliente

@@ -21,7 +21,8 @@ def test_generacion_servicio_excel():
         "nombre_obra": "Edificio Residencial Las Palmas",
         "ciudad": "Bogotá",
         "fecha_calculo": "2026-10-19",
-        "costo_total": 1611150.0,
+        "costo_total": 832750.0,
+        "costo_directo": 832750.0,
         "detalle": [
             {
                 "id_detalle": 10,
@@ -73,9 +74,11 @@ def test_generacion_servicio_excel():
     assert ws["B8"].value == "Acero de refuerzo 1/2 pulg"
     assert ws["F8"].value == "=D8*E8"
 
-    # Fila de total con fórmula SUM
-    assert ws["A9"].value == "TOTAL PRESUPUESTADO (COP):"
-    assert ws["F9"].value == "=SUM(F7:F8)"
+    # Resumen con costo directo y total
+    assert ws["A9"].value == "COSTO DIRECTO (COP):"
+    assert ws["F9"].value == 832750.0
+    assert ws["A13"].value == "TOTAL PRESUPUESTADO (COP):"
+    assert ws["F13"].value == 832750.0
 
 
 def test_endpoint_excel_presupuesto(mongo_store):
@@ -99,8 +102,9 @@ def test_endpoint_excel_presupuesto(mongo_store):
                 VALUES (777, 555, 'Torre Horizonte', 'Medellín')
             """))
             con.execute(text("""
-                INSERT INTO PRESUPUESTOS (id_presupuesto, id_proyecto, fecha_calculo, costo_total)
-                VALUES (888, 777, '2026-10-19', 485000)
+                INSERT INTO PRESUPUESTOS (id_presupuesto, id_proyecto, fecha_calculo, costo_total,
+                    porcentaje_administracion, porcentaje_imprevistos, porcentaje_utilidad)
+                VALUES (888, 777, '2026-10-19', 485000, 0, 0, 0)
             """))
             con.execute(text("""
                 INSERT INTO INSUMOS (id_insumo, nombre_insumo, unidad_medida, costo_unitario)

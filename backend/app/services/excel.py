@@ -160,12 +160,12 @@ def exportar_presupuesto_excel(presupuesto: Dict[str, Any]) -> io.BytesIO:
             ws.row_dimensions[fila_actual].height = 20
             fila_actual += 1
 
-    # -------------------------------------------------------------------------
-    # 4. Fila de Total Presupuestado
-    # -------------------------------------------------------------------------
+    # El resumen separa costo directo de los porcentajes AIU y conserva el total
+    # del servidor; los valores de cálculo no dependen de que Excel recalcule fórmulas.
+    fila_directo = fila_actual
     ws.merge_cells(f"A{fila_actual}:E{fila_actual}")
     c_tot_label = ws[f"A{fila_actual}"]
-    c_tot_label.value = "TOTAL PRESUPUESTADO (COP):"
+    c_tot_label.value = "COSTO DIRECTO (COP):"
     c_tot_label.font = font_total
     c_tot_label.alignment = align_der
     c_tot_label.fill = fill_total_label
@@ -178,15 +178,36 @@ def exportar_presupuesto_excel(presupuesto: Dict[str, Any]) -> io.BytesIO:
         c.fill = fill_total_label
 
     c_tot_val = ws.cell(row=fila_actual, column=6)
-    if detalles:
-        c_tot_val.value = f"=SUM(F{fila_inicio_tabla + 1}:F{fila_actual - 1})"
-    else:
-        c_tot_val.value = float(presupuesto.get("costo_total") or 0)
+    c_tot_val.value = float(presupuesto.get("costo_directo") or 0)
     c_tot_val.font = font_total_val
     c_tot_val.alignment = align_der
     c_tot_val.number_format = fmt_moneda
     c_tot_val.fill = fill_total_val
     c_tot_val.border = borde_total
+    ws.row_dimensions[fila_actual].height = 26
+    fila_actual += 1
+    for clave, etiqueta in (("administracion", "Administración"), ("imprevistos", "Imprevistos"), ("utilidad", "Utilidad")):
+        porcentaje = float(presupuesto.get(f"porcentaje_{clave}") or 0)
+        ws.merge_cells(f"A{fila_actual}:E{fila_actual}")
+        ws.cell(row=fila_actual, column=1, value=f"{etiqueta.upper()} ({porcentaje:g}%):").alignment = align_der
+        ws.cell(row=fila_actual, column=1).font = font_datos
+        ws.cell(row=fila_actual, column=6, value=float(presupuesto.get(f"valor_{clave}") or 0)).number_format = fmt_moneda
+        ws.cell(row=fila_actual, column=6).alignment = align_der
+        fila_actual += 1
+    ws.merge_cells(f"A{fila_actual}:E{fila_actual}")
+    total_label = ws.cell(row=fila_actual, column=1, value="TOTAL PRESUPUESTADO (COP):")
+    total_label.font = font_total
+    total_label.alignment = align_der
+    total_label.fill = fill_total_label
+    total_value = ws.cell(row=fila_actual, column=6, value=float(presupuesto.get("costo_total") or 0))
+    total_value.font = font_total_val
+    total_value.alignment = align_der
+    total_value.number_format = fmt_moneda
+    total_value.fill = fill_total_val
+    total_value.border = borde_total
+    for col_i in range(1, 6):
+        ws.cell(row=fila_actual, column=col_i).fill = fill_total_label
+        ws.cell(row=fila_actual, column=col_i).border = borde_total
     ws.row_dimensions[fila_actual].height = 26
 
     # -------------------------------------------------------------------------

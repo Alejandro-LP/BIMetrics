@@ -61,9 +61,22 @@ function DashboardPage() {
       detail: 'Proyectos propios y compartidos',
     },
     {
-      label: 'Insumos disponibles',
-      value: summary.total_insumos.toLocaleString('es-CO'),
-      detail: 'Elementos del catálogo de costos',
+      label: 'Partidas del catálogo',
+      value: summary.total_partidas_catalogo != null
+        ? Number(summary.total_partidas_catalogo).toLocaleString('es-CO')
+        : summary.catalogo_disponible === false ? 'SQL no disponible' : 'API desactualizada',
+      detail: summary.total_partidas_catalogo != null
+        ? 'Partidas registradas en la base SQL'
+        : summary.catalogo_disponible === false ? 'No se pudo consultar el catálogo SQL' : 'Reinicia el backend para cargar los conteos',
+    },
+    {
+      label: 'Variaciones de insumos',
+      value: summary.total_variaciones_catalogo != null
+        ? Number(summary.total_variaciones_catalogo).toLocaleString('es-CO')
+        : summary.catalogo_disponible === false ? 'SQL no disponible' : 'API desactualizada',
+      detail: summary.total_variaciones_catalogo != null
+        ? 'Variaciones registradas en la base SQL'
+        : summary.catalogo_disponible === false ? 'No se pudo consultar el catálogo SQL' : 'Reinicia el backend para cargar los conteos',
     },
   ] : []
 
@@ -102,9 +115,9 @@ function DashboardPage() {
           </GlassCard>
         )}
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {isLoading && !summary
-            ? [0, 1, 2].map((item) => (
+            ? [0, 1, 2, 3].map((item) => (
               <GlassCard key={item} className="h-40 animate-pulse p-6" aria-label="Cargando métrica">
                 <div className="mb-8 h-3 w-32 rounded bg-white/10" />
                 <div className="h-8 w-40 rounded bg-white/10" />
@@ -112,10 +125,10 @@ function DashboardPage() {
               </GlassCard>
             ))
             : metrics.map(({ label, value, detail }) => (
-              <GlassCard key={label} className="p-6">
+              <GlassCard key={label} className="p-5 sm:p-6">
                 <p className="text-sm font-medium text-slate-400">{label}</p>
-                <p className="mt-6 break-words text-3xl font-semibold tracking-tight text-white">{value}</p>
-                <p className="mt-2 text-xs text-slate-500">{detail}</p>
+                <p className={`mt-6 break-words font-semibold tracking-tight ${value === 'Sin datos' ? 'text-sm text-amber-200' : 'text-3xl text-white'}`}>{value}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{detail}</p>
               </GlassCard>
             ))}
         </div>

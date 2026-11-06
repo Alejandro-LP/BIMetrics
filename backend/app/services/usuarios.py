@@ -1,6 +1,7 @@
 """Casos de uso administrativos de identidades persistidas en MongoDB."""
 
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
 
 from ..config import ROLES
 from ..database import operational_engine
@@ -14,7 +15,7 @@ from .usuarios_mongo import (
 )
 
 
-def validar_usuario(datos, id_solicitante):
+def validar_usuario(datos, id_solicitante, requiere_password=False):
     """Valida perfil y limita la asignación de roles administrativos."""
     campos = ("nombre_completo", "email", "rol")
     if any(campo not in datos or datos[campo] in (None, "") for campo in campos):
@@ -31,7 +32,17 @@ def validar_usuario(datos, id_solicitante):
         solicitante = obtener_documento_usuario(id_solicitante) if id_solicitante else None
         if not solicitante or solicitante["rol"] != "administrador":
             raise ErrorApi(403, "Solo un administrador puede asignar ese rol")
-    return {"n": nombre, "e": email, "r": datos["rol"]}
+    password = datos.get("password", "")
+    if requiere_password and not isinstance(password, str):
+        raise ErrorApi(400, "La contraseña debe ser texto")
+    if requiere_password and not 10 <= len(password) <= 128:
+        raise ErrorApi(400, "La contraseña debe tener entre 10 y 128 caracteres")
+    if password and (not isinstance(password, str) or not 10 <= len(password) <= 128):
+        raise ErrorApi(400, "La contraseña debe tener entre 10 y 128 caracteres")
+    resultado = {"n": nombre, "e": email, "r": datos["rol"]}
+    if password:
+        resultado["password_hash"] = generate_password_hash(password)
+    return resultado
 
 
 def listar_usuarios(rol=None):
@@ -51,7 +62,7 @@ def crear_usuario(datos):
     """Crea una cuenta administrativa en el repositorio MongoDB."""
     if obtener_usuario_por_email(datos["e"]):
         raise ErrorApi(409, "Ese correo ya está asociado a otra cuenta")
-    return crear_o_actualizar_admin(datos)
+    return crear_o_actualizar_admin(datos, password_hash=datos["password_hash"])
 
 
 def actualizar_usuario(id_usuario, datos):
@@ -60,7 +71,9 @@ def actualizar_usuario(id_usuario, datos):
     existente = obtener_usuario_por_email(datos["e"])
     if existente and existente["id_usuario"] != int(id_usuario):
         raise ErrorApi(409, "Ese correo ya está asociado a otra cuenta")
-    actualizado = crear_o_actualizar_admin(datos, id_usuario=id_usuario)
+    actualizado = crear_o_actualizar_admin(
+        datos, id_usuario=id_usuario, password_hash=datos.get("password_hash")
+    )
     if not actualizado:
         raise ErrorApi(404, f"No existe usuario con id {id_usuario}")
     return actualizado

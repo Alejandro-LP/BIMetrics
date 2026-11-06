@@ -1,0 +1,54 @@
+name: Quality and dependency security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install backend dependencies and audit tools
+        run: |
+          python -m pip install -r backend/requirements.txt openapi-spec-validator pip-audit
+      - name: Run backend tests
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-only-secret-key-with-more-than-32-characters
+          OPERATIONAL_DATABASE_URL: sqlite://
+          CATALOG_DATABASE_URL: sqlite://
+          MONGO_URI: mongodb://127.0.0.1:27017
+          MONGO_DNS_SERVERS: ''
+          CORS_ORIGIN: http://localhost:5173
+        run: python -m pytest -q
+      - name: Validate OpenAPI contract
+        run: openapi-spec-validator docs/api/openapi.yaml
+      - name: Audit Python dependencies
+        run: pip-audit -r backend/requirements.txt
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-bimetrics
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend-bimetrics/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=moderate

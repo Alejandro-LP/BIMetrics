@@ -1,0 +1,7 @@
+{
+  "name": "bimetrics-local-runner",
+  "private": true,
+  "scripts": {
+    "dev": "python start.py"
+  }
+}

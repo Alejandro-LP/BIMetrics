@@ -33,7 +33,7 @@ def crear():
     datos = request.get_json(silent=True)
     if not isinstance(datos, dict):
         raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
-    usuario = validar_usuario(datos, session.get("id_usuario"))
+    usuario = validar_usuario(datos, session.get("id_usuario"), requiere_password=True)
     return jsonify(crear_usuario(usuario)), 201
 
 

@@ -78,7 +78,7 @@ Las páginas ya no cargan Google Fonts ni otros recursos tipográficos remotos; 
 
 El código revisado no contiene analítica, píxeles publicitarios ni almacenamiento web local. La aplicación usa la cookie técnica de sesión de Flask para mantener la autenticación; es necesaria para iniciar y mantener la sesión y, por defecto, es de sesión del navegador. No se emplearán cookies opcionales de publicidad o analítica en la versión descrita.
 
-La cookie está configurada como `HttpOnly` y `SameSite=Lax`. `SESSION_COOKIE_SECURE` está activo por defecto; para desarrollo local por HTTP debe configurarse explícitamente en `0`, y en producción debe mantenerse en `1` junto con HTTPS.
+La cookie está configurada como `HttpOnly` y `SameSite=Lax`. En desarrollo local por HTTP `SESSION_COOKIE_SECURE` vale `0`; en producción se debe servir mediante HTTPS y fijar `SESSION_COOKIE_SECURE=1`. La aplicación rechaza el arranque en modo producción si falta esa configuración.
 
 ## 10. Seguridad
 

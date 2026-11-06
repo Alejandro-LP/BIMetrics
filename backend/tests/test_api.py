@@ -16,6 +16,7 @@ from sqlalchemy.exc import OperationalError  # noqa: E402
 @pytest.fixture
 def c():
     cliente = create_app().test_client()
+    cliente.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
     usuario = cliente.post("/api/auth/registro", json={
         "nombre_completo": "Cuenta de pruebas",
         "email": "sesion@pruebas.local",
@@ -29,7 +30,7 @@ def c():
 
 @pytest.fixture
 def datos(c):
-    u = c.post("/api/usuarios", json={"nombre_completo": "Ana", "email": "ana@ejemplo.com", "rol": "ingeniero"}).get_json()
+    u = c.post("/api/usuarios", json={"nombre_completo": "Ana", "email": "ana@ejemplo.com", "rol": "ingeniero", "password": "ContrasenaPrueba123"}).get_json()
     p = c.post("/api/proyectos", json={"nombre_obra": "Casa de prueba"}).get_json()
     ins = {}
     for n, u_, costo in [("Concreto", "m3", 485000), ("Acero", "varilla", 46500), ("Oficial", "jornal", 115000)]:
@@ -39,6 +40,13 @@ def datos(c):
 
 def test_salud(c):
     assert c.get("/api/salud").get_json() == {"estado": "ok"}
+
+
+def test_produccion_rechaza_cookie_insegura(monkeypatch):
+    monkeypatch.setenv("BIMETRICS_ENV", "production")
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", "0")
+    with pytest.raises(RuntimeError, match="SESSION_COOKIE_SECURE=1"):
+        create_app()
 
 
 def test_cors_permite_frontend_con_sesion(c):
@@ -54,6 +62,7 @@ def test_origen_no_configurado_no_recibe_cors(c):
 
 def test_registro_login_y_cookie_de_sesion(c):
     cliente = create_app().test_client()
+    cliente.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
     datos = {
         "nombre_completo": "Usuario Auth",
         "email": "usuario.auth@pruebas.local",
@@ -79,6 +88,7 @@ def test_registro_login_y_cookie_de_sesion(c):
 
 def test_auth_rechaza_datos_invalidos_y_origen_hostil(c):
     cliente = create_app().test_client()
+    cliente.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
     assert cliente.post("/api/auth/registro", json={
         "nombre_completo": "Hacker", "email": "hacker@pruebas.local",
         "password": "ClaveSegura123!", "rol": "administrador", "autoriza_datos": True,
@@ -98,6 +108,69 @@ def test_respuestas_api_incluyen_cabeceras_de_seguridad(c):
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_escrituras_rechazan_solicitudes_sin_origen(c):
+    respuesta = c.post("/api/proyectos", json={"nombre_obra": "Sin origen"}, headers={"Origin": ""})
+    assert respuesta.status_code == 403
+
+
+def test_cliente_solo_puede_consultar(c, datos):
+    cliente = create_app().test_client()
+    cliente.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
+    registro = cliente.post("/api/auth/registro", json={
+        "nombre_completo": "Cliente", "email": "cliente@pruebas.local",
+        "password": "ClaveSegura123!", "rol": "cliente", "autoriza_datos": True,
+    })
+    assert registro.status_code == 201
+    assert cliente.get("/api/proyectos").status_code == 200
+    assert cliente.post("/api/proyectos", json={"nombre_obra": "No permitido"}).status_code == 403
+
+
+def test_usuario_admin_creado_tiene_hash_y_puede_iniciar_sesion(c):
+    creado = c.post("/api/usuarios", json={
+        "nombre_completo": "Cuenta gestionada", "email": "gestionada@pruebas.local",
+        "rol": "cliente", "password": "ClaveGestionada123!",
+    })
+    assert creado.status_code == 201
+    documento = _coleccion().find_one({"email": "gestionada@pruebas.local"})
+    assert documento["password_hash"] != "ClaveGestionada123!"
+    assert c.post("/api/auth/login", json={
+        "email": "gestionada@pruebas.local", "password": "ClaveGestionada123!",
+    }).status_code == 200
+    assert c.post("/api/auth/login", json={
+        "email": "sesion@pruebas.local", "password": "ClaveDePrueba123",
+    }).status_code == 200
+    perfil = c.get(f"/api/usuarios/{creado.get_json()['id_usuario']}")
+    assert perfil.status_code == 200
+    assert "password_hash" not in perfil.get_json()
+
+
+def test_catalogo_maestro_crud_restringido_a_admin(c):
+    datos = {
+        "codigo": "QA-001",
+        "unidad": "m2",
+        "descripcion": "Partida de prueba de QA",
+        "precio_defecto": 1250.5,
+        "variaciones": [{"tipo": "acabado", "opcion": "mate", "precio": 1300, "es_defecto": True}],
+    }
+    creado = c.post("/api/partidas", json=datos)
+    assert creado.status_code == 201
+    assert creado.get_json()["variaciones"][0]["opcion"] == "mate"
+    actualizado = c.put("/api/partidas/QA-001", json={**datos, "descripcion": "Partida actualizada"})
+    assert actualizado.status_code == 200
+    assert actualizado.get_json()["descripcion"] == "Partida actualizada"
+    assert c.get("/api/partidas/QA-001").status_code == 200
+    assert c.delete("/api/partidas/QA-001").status_code == 204
+
+    cliente = create_app().test_client()
+    cliente.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
+    usuario = cliente.post("/api/auth/registro", json={
+        "nombre_completo": "Cliente QA", "email": "catalogo.cliente@pruebas.local",
+        "password": "ClaveSegura123!", "rol": "cliente", "autoriza_datos": True,
+    })
+    assert usuario.status_code == 201
+    assert cliente.post("/api/partidas", json=datos).status_code == 403
 
 
 def test_sql_no_disponible_responde_json_503(c):
@@ -133,6 +206,28 @@ def test_presupuesto_calcula_total(c, datos):
     assert p["costo_total"] == 0.95 * 485000 + 8 * 46500 + 2 * 115000
     assert len(p["detalle"]) == 3
     assert c.post(f"/api/presupuestos/{p['id_presupuesto']}/calcular").get_json()["costo_total"] == p["costo_total"]
+
+
+def test_aiu_se_aplica_al_costo_directo_y_se_puede_actualizar(c, datos):
+    acero = datos["insumos"]["Acero"]["id_insumo"]
+    creado = c.post("/api/presupuestos", json={
+        "id_proyecto": datos["proyecto"],
+        "detalle": [{"id_insumo": acero, "cantidad": 2}],
+        "aiu": {"administracion": 5, "imprevistos": 2, "utilidad": 3},
+    }).get_json()
+    assert creado["costo_directo"] == 93000
+    assert creado["valor_administracion"] == 4650
+    assert creado["valor_imprevistos"] == 1860
+    assert creado["valor_utilidad"] == 2790
+    assert creado["costo_total"] == 102300
+
+    actualizado = c.put(f"/api/presupuestos/{creado['id_presupuesto']}/aiu", json={
+        "aiu": {"administracion": 10, "imprevistos": 0, "utilidad": 5},
+    }).get_json()
+    assert actualizado["costo_total"] == 106950
+    assert c.put(f"/api/presupuestos/{creado['id_presupuesto']}/aiu", json={
+        "aiu": {"administracion": -1},
+    }).status_code == 400
 
 
 def test_duplicar_usa_costos_vigentes(c, datos):
