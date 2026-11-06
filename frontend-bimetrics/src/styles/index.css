@@ -64,6 +64,47 @@ button:not(:disabled):active {
   filter: brightness(.96);
 }
 
+.budget-action-primary,
+.budget-action-secondary,
+.budget-action-labor {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.budget-action-primary:disabled {
+  background-image: linear-gradient(115deg, #334155, #37305f);
+  color: #d1d5db;
+  opacity: 1;
+  box-shadow: none;
+  filter: saturate(.72);
+  cursor: not-allowed;
+}
+
+.budget-action-secondary {
+  border-color: rgb(165 180 252 / 24%);
+  background: rgb(255 255 255 / 4%);
+  color: #e2e8f0;
+}
+
+.budget-action-secondary:not(:disabled):hover {
+  border-color: rgb(129 140 248 / 58%);
+  background: rgb(129 140 248 / 12%);
+  color: #fff;
+}
+
+.budget-action-secondary:disabled {
+  border-color: rgb(148 163 184 / 24%);
+  background: rgb(255 255 255 / 2%);
+  color: #cbd5e1;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.budget-action-labor:disabled {
+  opacity: .72;
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   button:not(:disabled) {
     transition-duration: .01ms;
