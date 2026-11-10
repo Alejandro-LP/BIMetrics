@@ -20,7 +20,7 @@ Aplicación web para gestionar proyectos y presupuestos de obra, consultar un ca
 
 ## Paquete de entrega académica
 
-- [Entrega 3 · Seguridad, API y cierre (PDF)](docs/entrega-3/entrega-3-seguridad-y-api.pdf)
+- [Entrega 3 · SRS de seguridad, autenticación y cierre (PDF)](docs/entrega-3/entrega-3-seguridad-y-api.pdf)
 - [Entrega 2 · Persistencia políglota y verificación (PDF)](docs/entrega-3/entrega-2-persistencia-poliglota.pdf)
 - [Trazabilidad de las entregas 1 y 2](docs/entrega-3/README.md)
 - [Diagrama UML](docs/entrega-3/casos-de-uso.svg) y [contrato OpenAPI](docs/api/openapi.yaml)

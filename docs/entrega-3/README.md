@@ -1,6 +1,6 @@
 # Entrega 3 de BIMetrics
 
-- [Entrega 3 · Seguridad, API y cierre (PDF)](entrega-3-seguridad-y-api.pdf)
+- [Entrega 3 · SRS de seguridad, autenticación y cierre (PDF)](entrega-3-seguridad-y-api.pdf)
 - [Entrega 2 · Persistencia políglota (PDF)](entrega-2-persistencia-poliglota.pdf)
 - [Repositorio público](https://github.com/Alejandro-LP/BIMetrics)
 - [Instalación y ejecución](../../README.md#configuración)
