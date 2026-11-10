@@ -1,0 +1,78 @@
+[
+  {
+    "label": "Registro arquitecto",
+    "status": 201
+  },
+  {
+    "label": "Registro cliente",
+    "status": 201
+  },
+  {
+    "label": "Acceso sin sesión · GET /api/proyectos",
+    "status": 401
+  },
+  {
+    "label": "CU-01 · Administrador crea partida",
+    "status": 201
+  },
+  {
+    "label": "CU-01 · Administrador modifica partida",
+    "status": 200
+  },
+  {
+    "label": "CU-01 · Administrador consulta partida",
+    "status": 200
+  },
+  {
+    "label": "CU-01 · Administrador elimina partida de prueba",
+    "status": 204
+  },
+  {
+    "label": "CU-02 · Creación de proyecto",
+    "status": 201
+  },
+  {
+    "label": "CU-02 · Creación de presupuesto con AIU",
+    "status": 201
+  },
+  {
+    "label": "CU-02 · Análisis de TXT tabulado",
+    "status": 200
+  },
+  {
+    "label": "CU-02 · Agregar 20 m de partida al presupuesto",
+    "status": 201
+  },
+  {
+    "label": "CU-03 · Descargar PDF",
+    "status": 200
+  },
+  {
+    "label": "CU-03 · Descargar WORD",
+    "status": 200
+  },
+  {
+    "label": "CU-03 · Descargar EXCEL",
+    "status": 200
+  },
+  {
+    "label": "CU-04 · Duplicar presupuesto",
+    "status": 201
+  },
+  {
+    "label": "CU-04 · Consultar historial del proyecto",
+    "status": 200
+  },
+  {
+    "label": "Cliente inicia sesión",
+    "status": 200
+  },
+  {
+    "label": "RBAC · Cliente intenta modificar catálogo",
+    "status": 403
+  },
+  {
+    "label": "Acceso a obra ajena · Cliente consulta presupuesto privado",
+    "status": 404
+  }
+]

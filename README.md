@@ -278,6 +278,10 @@ Que Flask inicie no garantiza que MongoDB esté conectado; la ruta de salud ejec
 
 Revisa el servicio MySQL, host, puerto, usuario, contraseña y nombre de la base en `CATALOG_DATABASE_URL` o en las variables `MYSQL_*`. Para desarrollo local puedes iniciar el catálogo SQLite mediante `start_local.ps1`.
 
+## Entrega 3
+
+Consulta el [cierre de seguridad, casos de uso y evidencias](docs/entrega-3/README.md).
+
 ## Documentación
 
 - [Contrato OpenAPI](docs/api/openapi.yaml)
