@@ -30,6 +30,19 @@ La aplicación consulta los presupuestos de un proyecto y permite duplicarlos. L
 
 Los cuatro casos se demuestran con el alcance indicado. El docente debe confirmar si acepta los pasos pendientes como cambios de alcance.
 
+## Trazabilidad con la Entrega 2 · Persistencia políglota
+
+Esta revisión sigue la consigna de la Entrega 2 y enlaza cada requisito con el entregable, la implementación o una ejecución.
+
+1. **Identificación de datos no estructurados.** La actividad BIM tiene campos comunes, como usuario, proyecto, origen y fecha, y un subdocumento flexible `detalles_bim`. Sus propiedades varían según el software o el evento, por ejemplo conteos, unidades y advertencias. La [justificación en PDF](../entregables/justificacion_persistencia_poliglota.pdf) describe el modelo documental y por qué estos campos se guardan en MongoDB.
+2. **Configuración y conexión NoSQL.** PyMongo configura la conexión con `MONGO_URI` y selecciona las bases por dominio. `GET /api/salud/mongodb` ejecuta un ping. La configuración está en el [código de conexión](../../backend/app/database.py) y en la [guía de persistencia](../arquitectura/persistencia-poliglota.md). La conexión a Atlas en vivo sigue pendiente de evidencia.
+3. **Persistencia políglota.** SQLite almacena proyectos, presupuestos y detalle. MySQL almacena el catálogo maestro en la configuración habitual. MongoDB almacena identidades, preferencias y actividad BIM. Las referencias lógicas `id_usuario` e `id_proyecto` relacionan los datos sin una clave foránea entre motores. [Mapa y justificación de los almacenes](../arquitectura/persistencia-poliglota.md)
+4. **Lógica de negocio y endpoint mixto.** `GET /api/dashboard/resumen` reúne en la misma respuesta el número de proyectos y el presupuesto total consultados en SQL, junto con el perfil y la última actividad de MongoDB. En la prueba devolvió **1 proyecto, $1.080.000 COP y la actividad BIM recién actualizada**. [Servicio del dashboard](../../backend/app/services/dashboard.py) · [Respuesta de la API](evidencias/persistencia-poliglota.json)
+5. **CRUD documental.** La API permite crear, leer, actualizar y eliminar actividades en `/api/actividades-bim`. La ejecución verificó **201, 200, 200 y 200**, respectivamente, y una consulta posterior a la eliminación devolvió **404**. Las pruebas cubren también los controles de propiedad y los campos editables. [Rutas](../../backend/app/routes/actividades_bim.py) · [Pruebas](../../backend/tests/test_actividades_bim.py) · [Evidencia](evidencias/persistencia-poliglota.json)
+6. **Repositorio, README y evidencias.** El [README principal](../../README.md#ejecución) contiene los pasos de configuración y ejecución. La [guía técnica](../arquitectura/persistencia-poliglota.md) explica cómo verificar MongoDB, reproducir el CRUD y consultar el endpoint mixto.
+
+**Alcance de la evidencia.** Las respuestas JSON se obtuvieron ejecutando la API Flask con SQLite en memoria, MongoDB simulado y datos ficticios. Para acreditar Atlas, falta anexar el ping exitoso, un documento de actividad en Atlas Data Explorer y la respuesta mixta en ese entorno, sin exponer credenciales ni datos personales.
+
 ## Verificación reproducible
 
 1. Sigue las [instrucciones de instalación](../../README.md#configuración), incluidas las dependencias del backend para PDF y Word.
