@@ -4,6 +4,9 @@ Aplicación web para gestionar proyectos y presupuestos de obra, consultar un ca
 
 ## Contenido
 
+- [Paquete de entrega académica](#paquete-de-entrega-académica)
+- [Ruta de evaluación desde un clon limpio](#ruta-de-evaluación-desde-un-clon-limpio)
+- [Guion de demostración para el docente](#guion-de-demostración-para-el-docente)
 - [Características](#características)
 - [Arquitectura](#arquitectura)
 - [Requisitos](#requisitos)
@@ -14,6 +17,97 @@ Aplicación web para gestionar proyectos y presupuestos de obra, consultar un ca
 - [Pruebas y calidad](#pruebas-y-calidad)
 - [Solución de problemas](#solución-de-problemas)
 - [Documentación](#documentación)
+
+## Paquete de entrega académica
+
+- [Entrega 3 · SRS de seguridad, autenticación y cierre (PDF)](docs/entrega-3/entrega-3-seguridad-y-api.pdf)
+- [Entrega 2 · Persistencia políglota y verificación (PDF)](docs/entrega-3/entrega-2-persistencia-poliglota.pdf)
+- [Trazabilidad de las entregas 1 y 2](docs/entrega-3/README.md)
+- [Diagrama UML](docs/entrega-3/casos-de-uso.svg) y [contrato OpenAPI](docs/api/openapi.yaml)
+- [Capturas, resultados y evidencia de conexión real a Atlas](docs/entrega-3/evidencias/README.md)
+
+## Ruta de evaluación desde un clon limpio
+
+1. Clona la rama de entrega y entra en la carpeta.
+2. Instala Python y Node en las versiones de [Requisitos](#requisitos). Crea el entorno e instala las dependencias.
+3. Escoge entre Atlas con MySQL y el modo de demostración con Docker Desktop.
+4. Inicia la app. Abre **http://localhost:5173** y mantén abierta la terminal. Flask atiende en **http://127.0.0.1:5000**.
+5. Comprueba los servicios. Si MongoDB devuelve HTTP 503, el registro y el inicio de sesión pueden fallar aunque la interfaz esté disponible.
+
+~~~powershell
+git clone --branch codex/entrega-3-seguridad-evidencias https://github.com/Alejandro-LP/BIMetrics.git
+Set-Location BIMetrics
+uv venv --python 3.14.2 .venv
+uv pip install --python .venv\Scripts\python.exe -r backend\requirements.txt
+npm --prefix frontend-bimetrics ci
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+~~~
+
+### Ejecución con Atlas y MySQL
+
+1. En Atlas, verifica que el clúster esté activo. Autoriza la IP de salida del equipo en **Database & Network Access** y configura un usuario de base de datos con acceso a los dominios de usuarios y actividad de BIMetrics.
+2. En el archivo privado **.env**, define **SECRET_KEY**, **MONGO_URI** y las bases de usuarios y actividad BIM. Usa la cadena que Atlas genera para PyMongo.
+3. En MySQL, crea el esquema que configuraste en **CATALOG_DATABASE_URL**. Restaura **data/catalogo/catalogo_precios_colombia.sql** o usa el importador que se describe en [Catálogo de insumos](#catálogo-de-insumos).
+4. Desde la raíz, ejecuta **.\.venv\Scripts\python.exe start.py**. En desarrollo HTTP, usa **SESSION_COOKIE_SECURE=0**. Para producción, configura HTTPS y **SESSION_COOKIE_SECURE=1**.
+
+### Ejecución independiente con Docker Desktop
+
+En un clon de evaluación, configura **SECRET_KEY** en **.env** y usa una base operativa SQLite propia del clon. Si el clon ya contiene datos de trabajo, apunta **OPERATIONAL_DATABASE_URL** a un archivo separado. Con Docker Desktop iniciado, ejecuta **.\start_local.ps1**. Este modo inicia MongoDB local y usa un catálogo SQLite local. Registra cuentas nuevas de prueba en ese entorno. Para mostrar partidas del catálogo en esta modalidad, usa un catálogo local preparado o crea una partida de prueba por API con una cuenta administradora.
+
+### Comprobaciones antes de la exposición
+
+~~~powershell
+$api = 'http://127.0.0.1:5000/api'
+Invoke-RestMethod "$api/salud"
+Invoke-RestMethod "$api/salud/mongodb"
+~~~
+
+Un HTTP 200 en salud general confirma que Flask responde. MongoDB se comprueba mediante ping. Para revisar SQL, inicia sesión y consulta **GET /api/partidas?limit=1** con la cookie. Si la lista está vacía, carga el catálogo o prepara una partida de prueba antes de la demostración.
+
+## Guion de demostración para el docente
+
+Usa cuentas y datos de prueba. Registra una cuenta de arquitectura para crear el presupuesto y una cuenta de cliente para comprobar la restricción de escritura. La cuenta administradora debe estar preparada por el responsable del entorno. El registro público admite arquitectura, ingeniería y cliente.
+
+| Caso | Acción | Resultado esperado |
+| --- | --- | --- |
+| Seguridad | Consulta proyectos sin sesión. Inicia sesión como cliente e intenta modificar el catálogo por API. | HTTP 401 sin sesión y HTTP 403 para la escritura del cliente. |
+| CU-01 · Catálogo | Como administrador, crea, consulta y edita una partida en **/api/partidas**. Elimina una partida desechable. | HTTP 201, 200, 200 y 204. |
+| CU-02 · Cálculo | Agrega 20 m de una partida de $45.000 COP/m. Aplica 10 % de administración, 3 % de imprevistos y 7 % de utilidad. | Costo directo de $900.000, AIU de $180.000 y total de $1.080.000 COP. Valores ilustrativos. |
+| CU-03 · Documentos | Descarga PDF, Word y Excel desde el presupuesto y abre los archivos. | Los tres formatos se descargan y muestran el desglose. |
+| CU-04 · Historial | Duplica un presupuesto y consulta el historial del proyecto. | El historial muestra el original y su copia. La copia usa precios vigentes del destino. |
+| Entrega 2 · SQL y NoSQL | Registra una actividad BIM vinculada a la obra. Consulta **GET /api/dashboard/resumen**. Después edita y elimina la actividad. | El resumen combina métricas SQL y actividad BIM. La lectura posterior a eliminar devuelve HTTP 404. |
+
+La [trazabilidad](docs/entrega-3/README.md) distingue lo demostrado de los pasos originales pendientes, como capítulos constructivos, firma digital certificada y filtros por cliente o fecha.
+
+### Cómo probar una ruta protegida
+
+En PowerShell 7, conserva la cookie en la misma sesión. El encabezado **Origin** de las escrituras debe coincidir con el frontend configurado.
+
+~~~powershell
+$api = 'http://127.0.0.1:5000/api'
+$origin = @{ Origin = 'http://localhost:5173' }
+$email = Read-Host 'Correo de la cuenta de prueba'
+$clave = Read-Host 'Contraseña de la cuenta de prueba' -MaskInput
+$body = @{ email = $email; password = $clave } | ConvertTo-Json -Compress
+Invoke-RestMethod "$api/auth/login" -Method Post -Headers $origin -ContentType 'application/json' -Body $body -SessionVariable sesion
+Remove-Variable clave,body
+Invoke-RestMethod "$api/auth/sesion" -WebSession $sesion
+Invoke-RestMethod "$api/proyectos" -WebSession $sesion
+Invoke-RestMethod "$api/partidas?limit=1" -WebSession $sesion
+Invoke-RestMethod "$api/dashboard/resumen" -WebSession $sesion
+~~~
+
+- **401** indica sesión ausente, vencida o credenciales rechazadas.
+- **403** indica permiso insuficiente u origen de escritura no autorizado.
+- **404** indica recurso inexistente o fuera del alcance de la cuenta.
+- **503** indica una dependencia no disponible.
+- Para revisar los campos y respuestas de cada operación, consulta [OpenAPI](docs/api/openapi.yaml).
+
+### Cómo leer las evidencias
+
+- **Atlas en vivo.** La [respuesta de salud](docs/entrega-3/evidencias/atlas-en-vivo.json) confirma HTTP 200 del clúster real. El inicio de sesión con credenciales ficticias devolvió HTTP 401, el resultado esperado.
+- **Pruebas reproducibles.** Pasaron **31 pruebas** del backend en el cierre. Se ejecutaron con SQLite en memoria y MongoDB simulado para aislar las reglas, los permisos y las exportaciones.
+- **Interfaz y API.** El [índice de evidencias](docs/entrega-3/evidencias/README.md) identifica el entorno de cada captura y respuesta JSON.
 
 ## Características
 
@@ -139,7 +233,7 @@ El backend requiere que MongoDB esté configurado. El catálogo maestro requiere
 Si Atlas no es accesible desde tu red, el script `start_local.ps1` inicia o reutiliza un contenedor MongoDB local. Requiere Docker Desktop iniciado y el entorno `.venv` instalado:
 
 ```powershell
-\.\start_local.ps1
+.\start_local.ps1
 ```
 
 Este modo usa MongoDB en `127.0.0.1:27017` y un catálogo SQLite local en `data/catalogo-local.db`. No modifica la URI de Atlas guardada en `.env`. Los datos creados localmente no se sincronizan con Atlas ni con MySQL.
@@ -249,7 +343,7 @@ npm run lint
 npm run build
 ```
 
-Última ejecución registrada: **24 pruebas aprobadas**. Las pruebas usan SQLite en memoria y MongoDB simulado; no son una prueba de conexión real a Atlas.
+Verificación del cierre: **31 pruebas aprobadas**. Las pruebas usan SQLite en memoria y MongoDB simulado; no son una prueba de conexión real a Atlas.
 
 Para documentar una ejecución contra Atlas, registra capturas reales de:
 
@@ -277,6 +371,10 @@ Que Flask inicie no garantiza que MongoDB esté conectado; la ruta de salud ejec
 ### MySQL no está disponible
 
 Revisa el servicio MySQL, host, puerto, usuario, contraseña y nombre de la base en `CATALOG_DATABASE_URL` o en las variables `MYSQL_*`. Para desarrollo local puedes iniciar el catálogo SQLite mediante `start_local.ps1`.
+
+## Entrega 3
+
+Consulta el [cierre de seguridad, casos de uso y evidencias](docs/entrega-3/README.md).
 
 ## Documentación
 

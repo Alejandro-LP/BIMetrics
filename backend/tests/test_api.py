@@ -1,7 +1,9 @@
 """Pruebas de la API. Ejecutar desde backend/:  python -m pytest -q"""
 import os
 import tempfile
+from io import BytesIO
 from unittest.mock import patch
+from zipfile import ZipFile
 
 # La base de pruebas va en una carpeta temporal, nunca en data/
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/prueba.db"
@@ -248,3 +250,29 @@ def test_insumo_en_uso_no_se_borra(c, datos):
     })
     assert presupuesto.status_code == 201
     assert c.delete(f"/api/insumos/{id_insumo}").status_code == 409
+
+
+def test_descargas_pdf_y_word_requieren_sesion_y_generan_archivos(c, datos):
+    presupuesto = c.post("/api/presupuestos", json={
+        "id_proyecto": datos["proyecto"],
+        "detalle": [{"id_insumo": datos["insumos"]["Acero"]["id_insumo"], "cantidad": 2}],
+    })
+    assert presupuesto.status_code == 201
+    ruta = f"/api/presupuestos/{presupuesto.json['id_presupuesto']}"
+    sin_sesion = create_app().test_client()
+
+    for formato in ("pdf", "word"):
+        assert sin_sesion.get(f"{ruta}/{formato}").status_code == 401
+
+    pdf = c.get(f"{ruta}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.mimetype == "application/pdf"
+    assert pdf.data.startswith(b"%PDF-")
+    assert "attachment" in pdf.headers["Content-Disposition"]
+
+    word = c.get(f"{ruta}/word")
+    assert word.status_code == 200
+    assert word.mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    assert "attachment" in word.headers["Content-Disposition"]
+    with ZipFile(BytesIO(word.data)) as archivo:
+        assert "word/document.xml" in archivo.namelist()
