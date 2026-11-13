@@ -1,431 +1,474 @@
 # BIMetrics
 
-Aplicación web para gestionar proyectos y presupuestos de obra, consultar un catálogo de insumos y registrar actividad BIM. El sistema combina persistencia relacional (SQL) con almacenamiento documental (MongoDB).
+Aplicación web integral para la gestión de proyectos y presupuestos de obra en Colombia, consulta de catálogo de partidas con variaciones, estimación de mano de obra y registro de trazabilidad de actividad BIM.
+
+El sistema implementa una **arquitectura de persistencia políglota**, combinando persistencia relacional SQL (SQLite para datos operacionales y MySQL para el catálogo maestro) con almacenamiento documental NoSQL en MongoDB (usuarios, preferencias y actividad BIM).
+
+---
 
 ## Contenido
 
-- [Paquete de entrega académica](#paquete-de-entrega-académica)
-- [Ruta de evaluación desde un clon limpio](#ruta-de-evaluación-desde-un-clon-limpio)
-- [Guion de demostración para el docente](#guion-de-demostración-para-el-docente)
-- [Características](#características)
-- [Arquitectura](#arquitectura)
-- [Requisitos](#requisitos)
-- [Configuración](#configuración)
+- [Características principales](#características-principales)
+- [Arquitectura del sistema](#arquitectura-del-sistema)
+- [Requisitos previos](#requisitos-previos)
+- [Instalación y configuración](#instalación-y-configuración)
+  - [1. Clonar el repositorio y preparar entornos](#1-clonar-el-repositorio-y-preparar-entornos)
+  - [2. Configurar variables de entorno](#2-configurar-variables-de-entorno)
+  - [3. Preparar el primer administrador](#3-preparar-el-primer-administrador)
 - [Ejecución](#ejecución)
-- [Persistencia y datos](#persistencia-y-datos)
-- [API principal](#api-principal)
-- [Pruebas y calidad](#pruebas-y-calidad)
-- [Solución de problemas](#solución-de-problemas)
-- [Documentación](#documentación)
+  - [Opción A: Lanzador conjunto (Recomendado)](#opción-a-lanzador-conjunto-recomendado)
+  - [Opción B: Modo local con Docker Desktop](#opción-b-modo-local-con-docker-desktop)
+  - [Opción C: Iniciar servicios por separado](#opción-c-iniciar-servicios-por-separado)
+- [Guion de demostración y pruebas](#guion-de-demostración-y-pruebas)
+  - [Casos de prueba funcionales](#casos-de-prueba-funcionales)
+  - [Prueba de endpoints protegidos por API](#prueba-de-endpoints-protegidos-por-api)
+- [Persistencia, datos y scripts](#persistencia-datos-y-scripts)
+  - [Distribución de datos](#distribución-de-datos)
+  - [Gestión y mantenimiento del catálogo](#gestión-y-mantenimiento-del-catálogo)
+  - [Importación de cómputos TXT (Revit y Archicad)](#importación-de-cómputos-txt-revit-y-archicad)
+  - [Scripts utilitarios disponibles](#scripts-utilitarios-disponibles)
+- [Referencia de la API REST](#referencia-de-la-api-rest)
+- [Pruebas y calidad de código](#pruebas-y-calidad-de-código)
+- [Solución de problemas comunes](#solución-de-problemas-comunes)
+- [Documentación técnica](#documentación-técnica)
+- [Seguridad](#seguridad)
 
-## Paquete de entrega académica
+---
 
-- [Entrega 3 · SRS de seguridad, autenticación y cierre (PDF)](docs/entrega-3/entrega-3-seguridad-y-api.pdf)
-- [Entrega 2 · Persistencia políglota y verificación (PDF)](docs/entrega-3/entrega-2-persistencia-poliglota.pdf)
-- [Trazabilidad de las entregas 1 y 2](docs/entrega-3/README.md)
-- [Diagrama UML](docs/entrega-3/casos-de-uso.svg) y [contrato OpenAPI](docs/api/openapi.yaml)
-- [Capturas, resultados y evidencia de conexión real a Atlas](docs/entrega-3/evidencias/README.md)
+## Características principales
 
-## Ruta de evaluación desde un clon limpio
+- **Gestión integral de presupuestos:** Creación y estructuración de proyectos de obra, capítulos, partidas e insumos con cálculo automatizado de costos directos y aplicación de porcentajes de AIU (Administración, Imprevistos y Utilidad).
+- **Catálogo de partidas y variaciones:** Búsqueda en catálogo SQL con tolerancia a errores tipográficos y sugerencias fonéticas/aproximadas.
+- **Sugerencias de mano de obra y jornales de referencia:** Recomendación de cuadrillas (oficial, ayudante, técnico) basadas en rendimientos APU y cotizaciones referenciales por ciudad (Bogotá, Medellín, Cali, Barranquilla, Bucaramanga, etc.).
+- **Importación de cómputos BIM:** Procesamiento de tablas tabuladas en texto plano (`.txt`) exportadas desde Autodesk Revit y Graphisoft Archicad, asociando elementos a partidas SQL con validación de codificación (UTF-8, UTF-16, Windows-1252).
+- **Exportación multiformato:** Generación y descarga de presupuestos en hojas de cálculo Excel (`.xlsx`), documentos editables Word (`.docx`) e informes en formato PDF.
+- **Control de acceso basado en roles (RBAC):**
+  - `administrador`: Control total del catálogo maestro, mantenimiento de insumos y administración de usuarios.
+  - `arquitectura` e `ingenieria`: Creación y edición de proyectos propios, presupuestos, análisis y colaboración mediante códigos de invitación.
+  - `cliente`: Perfil con permisos de solo lectura para supervisión y consulta de presupuestos aprobados.
+- **Recuperación segura de contraseñas:** Flujo de restablecimiento mediante tokens de un solo uso con caducidad temporal (30 minutos), soporte de entrega por correo SMTP y modo de depuración en pantalla para desarrollo local.
+- **Trazabilidad y registro de actividad BIM:** Registro documental en MongoDB de eventos de modelado, exportaciones y modificaciones por usuario y proyecto.
+- **Dashboard políglota unificado:** Endpoint que sintetiza en tiempo real métricas transaccionales SQL con metadatos de usuario y actividad documental NoSQL.
 
-1. Clona la rama de entrega y entra en la carpeta.
-2. Instala Python y Node en las versiones de [Requisitos](#requisitos). Crea el entorno e instala las dependencias.
-3. Escoge entre Atlas con MySQL y el modo de demostración con Docker Desktop.
-4. Inicia la app. Abre **http://localhost:5173** y mantén abierta la terminal. Flask atiende en **http://127.0.0.1:5000**.
-5. Comprueba los servicios. Si MongoDB devuelve HTTP 503, el registro y el inicio de sesión pueden fallar aunque la interfaz esté disponible.
+---
 
-~~~powershell
-git clone --branch codex/entrega-3-seguridad-evidencias https://github.com/Alejandro-LP/BIMetrics.git
-Set-Location BIMetrics
-uv venv --python 3.14.2 .venv
-uv pip install --python .venv\Scripts\python.exe -r backend\requirements.txt
-npm --prefix frontend-bimetrics ci
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-~~~
+## Arquitectura del sistema
 
-### Ejecución con Atlas y MySQL
-
-1. En Atlas, verifica que el clúster esté activo. Autoriza la IP de salida del equipo en **Database & Network Access** y configura un usuario de base de datos con acceso a los dominios de usuarios y actividad de BIMetrics.
-2. En el archivo privado **.env**, define **SECRET_KEY**, **MONGO_URI** y las bases de usuarios y actividad BIM. Usa la cadena que Atlas genera para PyMongo.
-3. En MySQL, crea el esquema que configuraste en **CATALOG_DATABASE_URL**. Restaura **data/catalogo/catalogo_precios_colombia.sql** o usa el importador que se describe en [Catálogo de insumos](#catálogo-de-insumos).
-4. Desde la raíz, ejecuta **.\.venv\Scripts\python.exe start.py**. En desarrollo HTTP, usa **SESSION_COOKIE_SECURE=0**. Para producción, configura HTTPS y **SESSION_COOKIE_SECURE=1**.
-
-<<<<<<< HEAD
-#### Preparar el primer administrador
-
-El formulario público no permite asignar el rol administrador. Para habilitar la demostración de CU-01, inicia el backend al menos una vez con MongoDB configurado y luego, desde `backend/`, ejecuta `..\.venv\Scripts\python.exe -m scripts.crear_administrador`. El asistente pide nombre, correo y contraseña sin mostrarla en pantalla; solo crea el administrador inicial cuando todavía no hay uno. Las cuentas administradoras posteriores se crean desde una sesión administradora mediante `POST /api/usuarios`.
-
-=======
->>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
-### Ejecución independiente con Docker Desktop
-
-En un clon de evaluación, configura **SECRET_KEY** en **.env** y usa una base operativa SQLite propia del clon. Si el clon ya contiene datos de trabajo, apunta **OPERATIONAL_DATABASE_URL** a un archivo separado. Con Docker Desktop iniciado, ejecuta **.\start_local.ps1**. Este modo inicia MongoDB local y usa un catálogo SQLite local. Registra cuentas nuevas de prueba en ese entorno. Para mostrar partidas del catálogo en esta modalidad, usa un catálogo local preparado o crea una partida de prueba por API con una cuenta administradora.
-
-### Comprobaciones antes de la exposición
-
-~~~powershell
-$api = 'http://127.0.0.1:5000/api'
-Invoke-RestMethod "$api/salud"
-Invoke-RestMethod "$api/salud/mongodb"
-~~~
-
-Un HTTP 200 en salud general confirma que Flask responde. MongoDB se comprueba mediante ping. Para revisar SQL, inicia sesión y consulta **GET /api/partidas?limit=1** con la cookie. Si la lista está vacía, carga el catálogo o prepara una partida de prueba antes de la demostración.
-
-## Guion de demostración para el docente
-
-<<<<<<< HEAD
-Usa cuentas y datos de prueba. Registra una cuenta de arquitectura para crear el presupuesto y una cuenta de cliente para comprobar la restricción de escritura. Prepara la primera cuenta administradora con el procedimiento anterior. El registro público admite arquitectura, ingeniería y cliente; la cuenta administradora no se puede autoasignar desde el formulario.
-=======
-Usa cuentas y datos de prueba. Registra una cuenta de arquitectura para crear el presupuesto y una cuenta de cliente para comprobar la restricción de escritura. La cuenta administradora debe estar preparada por el responsable del entorno. El registro público admite arquitectura, ingeniería y cliente.
->>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
-
-| Caso | Acción | Resultado esperado |
-| --- | --- | --- |
-| Seguridad | Consulta proyectos sin sesión. Inicia sesión como cliente e intenta modificar el catálogo por API. | HTTP 401 sin sesión y HTTP 403 para la escritura del cliente. |
-| CU-01 · Catálogo | Como administrador, crea, consulta y edita una partida en **/api/partidas**. Elimina una partida desechable. | HTTP 201, 200, 200 y 204. |
-| CU-02 · Cálculo | Agrega 20 m de una partida de $45.000 COP/m. Aplica 10 % de administración, 3 % de imprevistos y 7 % de utilidad. | Costo directo de $900.000, AIU de $180.000 y total de $1.080.000 COP. Valores ilustrativos. |
-| CU-03 · Documentos | Descarga PDF, Word y Excel desde el presupuesto y abre los archivos. | Los tres formatos se descargan y muestran el desglose. |
-| CU-04 · Historial | Duplica un presupuesto y consulta el historial del proyecto. | El historial muestra el original y su copia. La copia usa precios vigentes del destino. |
-| Entrega 2 · SQL y NoSQL | Registra una actividad BIM vinculada a la obra. Consulta **GET /api/dashboard/resumen**. Después edita y elimina la actividad. | El resumen combina métricas SQL y actividad BIM. La lectura posterior a eliminar devuelve HTTP 404. |
-
-<<<<<<< HEAD
-La [trazabilidad](docs/entrega-3/README.md) y la [guía de evidencias](docs/entrega-3/evidencias/README.md) enlazan los casos funcionales con la API, las pruebas automatizadas y las capturas disponibles. Las pruebas no simulan una firma digital certificada ni reemplazan la conexión en vivo a Atlas.
-=======
-La [trazabilidad](docs/entrega-3/README.md) distingue lo demostrado de los pasos originales pendientes, como capítulos constructivos, firma digital certificada y filtros por cliente o fecha.
->>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
-
-### Cómo probar una ruta protegida
-
-En PowerShell 7, conserva la cookie en la misma sesión. El encabezado **Origin** de las escrituras debe coincidir con el frontend configurado.
-
-~~~powershell
-$api = 'http://127.0.0.1:5000/api'
-$origin = @{ Origin = 'http://localhost:5173' }
-$email = Read-Host 'Correo de la cuenta de prueba'
-$clave = Read-Host 'Contraseña de la cuenta de prueba' -MaskInput
-$body = @{ email = $email; password = $clave } | ConvertTo-Json -Compress
-Invoke-RestMethod "$api/auth/login" -Method Post -Headers $origin -ContentType 'application/json' -Body $body -SessionVariable sesion
-Remove-Variable clave,body
-Invoke-RestMethod "$api/auth/sesion" -WebSession $sesion
-Invoke-RestMethod "$api/proyectos" -WebSession $sesion
-Invoke-RestMethod "$api/partidas?limit=1" -WebSession $sesion
-Invoke-RestMethod "$api/dashboard/resumen" -WebSession $sesion
-~~~
-
-- **401** indica sesión ausente, vencida o credenciales rechazadas.
-- **403** indica permiso insuficiente u origen de escritura no autorizado.
-- **404** indica recurso inexistente o fuera del alcance de la cuenta.
-- **503** indica una dependencia no disponible.
-- Para revisar los campos y respuestas de cada operación, consulta [OpenAPI](docs/api/openapi.yaml).
-
-### Cómo leer las evidencias
-
-- **Atlas en vivo.** La [respuesta de salud](docs/entrega-3/evidencias/atlas-en-vivo.json) confirma HTTP 200 del clúster real. El inicio de sesión con credenciales ficticias devolvió HTTP 401, el resultado esperado.
-- **Pruebas reproducibles.** Pasaron **31 pruebas** del backend en el cierre. Se ejecutaron con SQLite en memoria y MongoDB simulado para aislar las reglas, los permisos y las exportaciones.
-- **Interfaz y API.** El [índice de evidencias](docs/entrega-3/evidencias/README.md) identifica el entorno de cada captura y respuesta JSON.
-
-## Características
-
-- Administración de proyectos, presupuestos e insumos.
-- Catálogo SQL de partidas, variaciones y precios de referencia.
-- Sugerencias de mano de obra para cada partida: reglas por actividad y recomendación general de oficial y ayudante cuando no hay una regla específica. Los recursos con tarifa local se agregan al presupuesto; las partidas de alquiler de equipo con un montaje explícito asociado enlazan ambas actividades.
-- Registro de usuarios, preferencias y actividad BIM.
-- Dashboard que reúne información SQL y MongoDB.
-- Los conteos del dashboard salen de las tablas SQL de partidas y variaciones; si MySQL no responde, usa los conteos del CSV local y señala que son una copia de respaldo.
-- Validación de acceso a proyectos y propiedad de las actividades.
-
-## Arquitectura
+BIMetrics desacopla sus componentes para maximizar la integridad transaccional y la flexibilidad en datos no estructurados:
 
 | Componente | Tecnología | Responsabilidad |
 |---|---|---|
-| Frontend | React, Vite | Interfaz de usuario |
-| Backend | Python, Flask | API REST y lógica de negocio |
-| SQL operacional | SQLite por defecto | Proyectos, presupuestos e insumos |
-| SQL de catálogo | MySQL | Partidas y variaciones del catálogo maestro |
-| NoSQL documental | MongoDB | Usuarios, preferencias y actividad BIM |
+| **Frontend** | React 19, Vite, Tailwind CSS, Lucide React, Framer Motion | Interfaz de usuario SPA responsiva, gestión de vistas y consumo de API. |
+| **Backend** | Python 3.14, Flask 3.1, SQLAlchemy 2, PyMongo | API RESTful, control de sesiones, validaciones de seguridad y lógica de negocio. |
+| **SQL Operacional** | SQLite (por defecto: `data/presupuestos.db`) | Entidades estructuradas transaccionales: proyectos, colaboradores, presupuestos, detalles e insumos. |
+| **SQL Catálogo** | MySQL (o SQLite local para pruebas: `data/catalogo-local.db`) | Catálogo maestro de partidas, unidades, precios de referencia y variaciones. |
+| **NoSQL Documental** | MongoDB (`bimetrics_users` y `bimetrics_nosql`) | Colecciones de identidades de usuario, credenciales hasheadas, preferencias y actividad BIM variable. |
 
 ```mermaid
 flowchart LR
-    UI[React + Vite] --> API[API Flask]
-    API --> SQL[(SQL operacional<br/>SQLite)]
-    API --> CAT[(SQL catálogo<br/>MySQL)]
-    API --> MONGO[(MongoDB<br/>usuarios y actividad BIM)]
+    UI["Frontend (React + Vite)<br/>:5173"] -->|"Llamadas API REST<br/>Cookies SameSite=Lax"| API["Backend (Flask REST API)<br/>:5000"]
+    API -->|"SQLAlchemy<br/>(Transaccional)"| SQL[("SQL Operacional<br/>SQLite")]
+    API -->|"Flask-SQLAlchemy<br/>(Catálogo)"| CAT[("SQL Catálogo Maestro<br/>MySQL / SQLite")]
+    API -->|"PyMongo<br/>(Identidad y Eventos)"| MONGO[("MongoDB<br/>Atlas / Local")]
 ```
 
-La API coordina las consultas entre motores. Las relaciones entre SQL y MongoDB se establecen mediante identificadores lógicos, como `id_usuario` e `id_proyecto`; no hay una transacción distribuida entre ambos motores.
+> [!NOTE]
+> Las relaciones entre motores se articulan mediante identificadores lógicos (`id_usuario`, `id_proyecto`). No existen transacciones distribuidas complejas ni acoplamiento rígido entre SQL y NoSQL.
 
-## Requisitos
+---
 
-- Python **3.14.2** (versión indicada en `.python-version`).
-- Node.js **24.13.0** y npm (versión indicada en `.nvmrc`).
-- [uv](https://docs.astral.sh/uv/) para crear e instalar el entorno Python.
-- MongoDB accesible para autenticación, perfiles y actividades BIM.
-- MySQL accesible para el catálogo maestro, salvo que uses el modo local descrito más abajo.
+## Requisitos previos
 
-SQLite se utiliza por defecto para los datos operativos. MongoDB y MySQL pueden ser locales o servicios administrados.
+- **Python:** 3.14.2 (o versión `>=3.11` compatible indicada en `.python-version`).
+- **Node.js:** v24.13.0 (indicada en `.nvmrc`) y gestor de paquetes **npm**.
+- **uv:** Herramienta recomendada para la gestión rápida de entornos virtuales de Python ([instalación de uv](https://docs.astral.sh/uv/)). De forma alternativa, se puede usar el módulo estándar `venv` y `pip`.
+- **Motor de persistencia:**
+  - Instancia de **MongoDB** accesible (clúster en MongoDB Atlas o servicio local vía Docker).
+  - Instancia de **MySQL** para el catálogo maestro (opcional si se utiliza el modo de prueba local con Docker o SQLite).
 
-## Configuración
+---
 
-### 1. Preparar el entorno
+## Instalación y configuración
 
-Ejecuta estos comandos desde la raíz del repositorio en PowerShell:
+### 1. Clonar el repositorio y preparar entornos
+
+Ejecuta desde PowerShell (Windows) o Bash (Linux/macOS):
 
 ```powershell
+# Clonar el repositorio
+git clone https://github.com/Alejandro-LP/BIMetrics.git
+Set-Location BIMetrics
+
+# Crear y activar entorno virtual de Python
 uv venv --python 3.14.2 .venv
-uv pip install --python .venv\Scripts\python.exe -r backend\requirements.txt
-Copy-Item .env.example .env
+# En Windows:
+.\.venv\Scripts\Activate.ps1
+# En Linux/macOS: source .venv/bin/activate
+
+# Instalar dependencias del backend
+uv pip install -r backend\requirements.txt
+
+# Instalar dependencias del frontend
 npm --prefix frontend-bimetrics install
+
+# Crear archivo de configuración local a partir de la plantilla
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Si no tienes `uv`, puedes crear el entorno con `python -m venv .venv` y luego instalar las dependencias con `\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt`.
+*(Si no usas `uv`, crea el entorno con `python -m venv .venv` e instala con `.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt`).*
 
 ### 2. Configurar variables de entorno
 
-Edita `.env`. Define una clave secreta aleatoria y configura las conexiones que correspondan. Ejemplo:
+Edita el archivo `.env` en la raíz del proyecto. Variables esenciales:
 
 ```dotenv
-SECRET_KEY=reemplaza-por-una-clave-aleatoria-privada
+# Clave secreta para firma de cookies de sesión (generar con python -c "import secrets; print(secrets.token_hex(32))")
+SECRET_KEY=clave_secreta_privada_y_aleatoria_de_al_menos_32_caracteres
+
+# Cookies seguras: 0 para desarrollo local HTTP; 1 para producción con HTTPS
 SESSION_COOKIE_SECURE=0
+BIMETRICS_ENV=development
+
+# Bases de datos SQL
 OPERATIONAL_DATABASE_URL=sqlite:///data/presupuestos.db
-CATALOG_DATABASE_URL=mysql+pymysql://usuario:clave@localhost/BIMetricsBD?charset=utf8mb4
-MONGO_URI=mongodb+srv://usuario:clave@cluster.example.mongodb.net/
+CATALOG_DATABASE_URL=mysql+pymysql://usuario:password@localhost/BIMetricsBD?charset=utf8mb4
+
+# Orígenes CORS permitidos (separados por comas)
+CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
+
+# MongoDB (Atlas o local)
+MONGO_URI=mongodb+srv://usuario:password@cluster.mongodb.net/
 MONGO_DB_NAME=bimetrics_users
 MONGO_ACTIVITY_DB_NAME=bimetrics_nosql
-CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
+# MONGO_DNS_SERVERS=1.1.1.1,8.8.8.8 # Opcional si la red local tiene problemas de resolución SRV
+
+# Recuperación de contraseñas
+APP_BASE_URL=http://localhost:5173
+PASSWORD_RESET_DEBUG=1 # En desarrollo local muestra el enlace en la UI; usar 0 en producción
+# SMTP_HOST=smtp.example.com
+# SMTP_PORT=587
+# SMTP_USERNAME=usuario-smtp
+# SMTP_PASSWORD=clave-smtp
+# SMTP_FROM=no-reply@example.com
+# SMTP_USE_TLS=1
 ```
 
-`SESSION_COOKIE_SECURE=0` es para desarrollo local por HTTP. En producción configura HTTPS y establece `BIMETRICS_ENV=production` y `SESSION_COOKIE_SECURE=1`; la API se negará a iniciar si producción no tiene cookie segura o `SECRET_KEY` de al menos 32 caracteres. Si la contraseña de MongoDB contiene caracteres reservados de URI, codifícala correctamente. No compartas ni subas `.env`.
+### 3. Preparar el primer administrador
 
-Variables principales:
+Por directriz de seguridad, el formulario público de registro no permite autoasignarse el rol de administrador.
 
-| Variable | Uso |
-|---|---|
-| `SECRET_KEY` | Firma de la sesión Flask; obligatoria. |
-| `OPERATIONAL_DATABASE_URL` | Base SQL para proyectos, presupuestos e insumos. SQLite local por defecto. |
-| `CATALOG_DATABASE_URL` | Base SQL de catálogo; MySQL por defecto. |
-| `MONGO_URI` | URI de MongoDB. |
-| `MONGO_DB_NAME` | Base documental de usuarios y perfiles. |
-| `MONGO_ACTIVITY_DB_NAME` | Base documental de actividad BIM. |
-| `MONGO_DNS_SERVERS` | Resolutores DNS opcionales separados por comas para conexiones `mongodb+srv`. |
-| `CORS_ORIGIN` | Orígenes permitidos para el frontend. |
-| `SESSION_COOKIE_SECURE` | Requiere cookie segura en HTTPS cuando vale `1`. |
-| `APP_BASE_URL` | URL pública del frontend para construir el enlace de recuperación. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | Servidor de correo para entregar enlaces de restablecimiento. |
-| `SMTP_USE_TLS` | Habilita STARTTLS, normalmente en el puerto 587. |
-| `PASSWORD_RESET_DEBUG` | En desarrollo local, muestra el enlace en la interfaz para probar sin SMTP. Nunca usar en producción. |
+Para inicializar la primera cuenta administrativa:
+1. Inicia el backend al menos una vez para validar la conexión con MongoDB.
+2. Desde la carpeta `backend/`, ejecuta:
+   ```powershell
+   Set-Location backend
+   ..\.venv\Scripts\python.exe -m scripts.crear_administrador
+   Set-Location ..
+   ```
+3. El asistente interactivo solicitará nombre, correo y contraseña. Solo creará la cuenta si no existe un administrador en la base de datos.
+4. Las cuentas administradoras subsiguientes podrán ser creadas por este administrador mediante la API en `POST /api/usuarios`.
 
-Para MySQL también puedes configurar `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` y `MYSQL_DATABASE` en lugar de `CATALOG_DATABASE_URL`.
+---
 
 ## Ejecución
 
-### Opción A: iniciar frontend y backend juntos
+### Opción A: Lanzador conjunto (Recomendado)
 
-Desde la raíz, con `.venv` activado en PowerShell:
+Desde la raíz del repositorio, ejecuta:
 
 ```powershell
 npm run dev
+# o alternativamente:
+.\.venv\Scripts\python.exe start.py
 ```
 
-El comando inicia Flask y Vite en la misma terminal. Abre el frontend en `http://localhost:5173`; la API estará en `http://127.0.0.1:5000`. Para detener ambos procesos, pulsa `Ctrl+C`. También puedes iniciar el mismo lanzador con `python start.py`.
+El script inicia en paralelo el servidor Flask (`http://127.0.0.1:5000`) y el servidor Vite (`http://localhost:5173`). Al pulsar `Ctrl+C`, ambos procesos se detienen de forma limpia.
 
-### Opción B: iniciar cada servicio por separado
+### Opción B: Modo local con Docker Desktop
 
-Terminal 1, backend:
-
-```powershell
-\.venv\Scripts\Activate.ps1
-Set-Location backend
-python run.py
-```
-
-Terminal 2, frontend:
-
-```powershell
-Set-Location frontend-bimetrics
-npm run dev
-```
-
-El backend requiere que MongoDB esté configurado. El catálogo maestro requiere MySQL, a menos que se utilice el modo local. Vite sirve la interfaz y se comunica con la API.
-
-### Modo local con MongoDB en Docker
-
-Si Atlas no es accesible desde tu red, el script `start_local.ps1` inicia o reutiliza un contenedor MongoDB local. Requiere Docker Desktop iniciado y el entorno `.venv` instalado:
+Si no tienes acceso a MongoDB Atlas o a una base MySQL remota, el script automatizado `start_local.ps1` levanta un contenedor local de MongoDB en Docker y utiliza una base SQLite local para el catálogo:
 
 ```powershell
 .\start_local.ps1
 ```
 
-Este modo usa MongoDB en `127.0.0.1:27017` y un catálogo SQLite local en `data/catalogo-local.db`. No modifica la URI de Atlas guardada en `.env`. Los datos creados localmente no se sincronizan con Atlas ni con MySQL.
+- Inicia o reutiliza el contenedor Docker `bimetrics-mongodb-local` en el puerto `27017`.
+- Configura temporalmente `MONGO_URI=mongodb://127.0.0.1:27017` y el catálogo en `data/catalogo-local.db`.
+- Lanza frontend y backend de manera inmediata.
 
-## Persistencia y datos
+### Opción C: Iniciar servicios por separado
 
-### Distribución
+Si prefieres monitorear los logs de cada servicio en terminales independientes:
 
-| Datos | Almacenamiento |
+**Terminal 1 — Backend (Flask):**
+```powershell
+.\.venv\Scripts\Activate.ps1
+Set-Location backend
+python run.py
+```
+
+**Terminal 2 — Frontend (Vite):**
+```powershell
+Set-Location frontend-bimetrics
+npm run dev
+```
+
+---
+
+## Guion de demostración y pruebas
+
+Para evaluar o demostrar la plataforma, se recomienda seguir el siguiente guion con cuentas de prueba:
+
+1. **Cuentas requeridas:**
+   - Una cuenta con rol **Arquitectura** o **Ingeniería** (creada desde el formulario de registro).
+   - Una cuenta con rol **Cliente** (creada desde el formulario de registro).
+   - Una cuenta **Administrador** (creada mediante `scripts.crear_administrador`).
+
+### Casos de prueba funcionales
+
+| Caso | Acción a realizar | Resultado esperado |
+|---|---|---|
+| **Seguridad y RBAC** | Intentar consultar proyectos sin sesión activa. Iniciar sesión como `cliente` e intentar crear o modificar una partida de catálogo. | Respuesta `HTTP 401 Unauthorized` sin sesión. Respuesta `HTTP 403 Forbidden` en escrituras del cliente. |
+| **CU-01 · Catálogo de partidas** | Como administrador, acceder a `/api/partidas` o al panel de partidas, crear una partida nueva, buscarla, editar su precio de referencia y eliminar una partida de prueba. | Operaciones exitosas con códigos HTTP 201, 200 y 204. Solo accesible a administradores. |
+| **CU-02 · Cálculo y AIU** | Crear un presupuesto, asociar una partida (ej. 20 m de tubería o mampostería), configurar AIU (10% administración, 3% imprevistos, 7% utilidad) y solicitar el cálculo. | Desglose exacto de costo directo, valor de AIU y valor total de la obra. |
+| **CU-03 · Exportación de documentos** | En la vista de presupuesto, descargar las versiones en **Excel (.xlsx)**, **Word (.docx)** y **PDF**. | Los tres archivos se generan y descargan correctamente con el desglose del presupuesto y resumen de AIU. |
+| **CU-04 · Historial y duplicación** | Duplicar un presupuesto existente dentro del proyecto y consultar la trazabilidad. | Se genera un duplicado independiente actualizando los precios unitarios vigentes según la base destino. |
+| **Persistencia políglota** | Registrar un evento de actividad BIM vinculado a la obra y consultar `GET /api/dashboard/resumen`. | El dashboard devuelve una respuesta unificada que integra métricas transaccionales SQL y el historial documental NoSQL de MongoDB. |
+
+### Prueba de endpoints protegidos por API
+
+En PowerShell 7, puedes probar el flujo completo con cookies de sesión y encabezado de origen:
+
+```powershell
+$api = 'http://127.0.0.1:5000/api'
+$headers = @{ Origin = 'http://localhost:5173' }
+
+# 1. Comprobaciones de salud
+Invoke-RestMethod "$api/salud"
+Invoke-RestMethod "$api/salud/sql"
+Invoke-RestMethod "$api/salud/mongodb"
+
+# 2. Iniciar sesión y capturar cookie de sesión
+$credenciales = @{ email = 'admin@example.com'; password = 'TuPasswordSeguro123' } | ConvertTo-Json
+Invoke-RestMethod "$api/auth/login" -Method Post -Headers $headers -ContentType 'application/json' -Body $credenciales -SessionVariable sesion
+
+# 3. Consultar rutas protegidas utilizando la sesión autenticada
+Invoke-RestMethod "$api/auth/sesion" -WebSession $sesion
+Invoke-RestMethod "$api/proyectos" -WebSession $sesion
+Invoke-RestMethod "$api/dashboard/resumen" -WebSession $sesion
+```
+
+---
+
+## Persistencia, datos y scripts
+
+### Distribución de datos
+
+```
+BIMetrics
+├── SQL Operacional (SQLite: data/presupuestos.db)
+│   ├── PROYECTOS, PROYECTO_COLABORADORES
+│   ├── PRESUPUESTOS, DETALLE_PRESUPUESTO
+│   └── INSUMOS, PRECIOS_CIUDAD, COTIZACIONES_MANO_OBRA
+│
+├── SQL Catálogo Maestro (MySQL / SQLite local)
+│   ├── partidas (código, descripción, unidad, precio base)
+│   ├── variaciones_opciones (opciones, factores y precios)
+│   └── recomendaciones_mano_obra (rendimientos por jornal)
+│
+└── MongoDB NoSQL (Atlas / Local)
+    ├── bimetrics_users: usuarios (credenciales hash, roles, perfil)
+    └── bimetrics_nosql: actividades_bim (eventos y metadatos variables)
+```
+
+### Gestión y mantenimiento del catálogo
+
+El catálogo maestro incluye más de 3.000 partidas y variaciones del sector de la construcción en Colombia:
+
+- **Volcado SQL principal:** `data/catalogo/catalogo_precios_colombia.sql` (para importar en esquemas MySQL como `BIMetricsBD`).
+- **Respaldo CSV:** `data/catalogo/catalogo_precios_colombia.csv`.
+- **Validar CSV sin escribir en base de datos:**
+  ```powershell
+  Set-Location backend
+  ..\.venv\Scripts\python.exe -m scripts.importar_catalogo_csv --dry-run
+  ```
+- **Cargar catálogo desde CSV a la base configurada:**
+  ```powershell
+  ..\.venv\Scripts\python.exe -m scripts.importar_catalogo_csv
+  ```
+- **Regenerar el volcado SQL a partir del CSV:**
+  ```powershell
+  ..\.venv\Scripts\python.exe -m scripts.generar_catalogo_sql
+  ```
+
+### Importación de cómputos TXT (Revit y Archicad)
+
+La aplicación permite subir cómputos tabulados exportados desde Revit o Archicad:
+- Admite archivos de hasta 5 MB y hasta 1.000 registros.
+- Detección automática de codificaciones de texto (`UTF-8`, `UTF-16`, `Windows-1252`).
+- Asocia automáticamente columnas de elemento/tipo y cantidad, proponiendo la partida correspondiente del catálogo SQL para revisión previa del usuario.
+
+### Scripts utilitarios disponibles
+
+Ejecutar siempre desde la carpeta `backend/` con el entorno virtual:
+
+| Script | Descripción |
 |---|---|
-| Proyectos, presupuestos e insumos | SQL operacional |
-| Partidas, variaciones y precios de referencia | MySQL (catálogo SQL) |
-| Usuarios y preferencias | MongoDB (`bimetrics_users`) |
-| Historial y metadatos de actividad BIM | MongoDB (`bimetrics_nosql`) |
+| `scripts.crear_administrador` | Crea interactivamente la cuenta administradora inicial en MongoDB. |
+| `scripts.cargar_cotizaciones_mano_obra` | Carga o actualiza jornales de referencia y rangos de mano de obra por ciudad. |
+| `scripts.cargar_recomendaciones_mano_obra` | Registra rendimientos APU y perfiles requeridos para partidas específicas en MySQL. |
+| `scripts.poblar_bd` | Carga proyectos, presupuestos e insumos de prueba (usar `--reset` para limpiar tablas operacionales). |
+| `scripts.diagnostico_atlas_remoto` | Valida la conexión de red, resolución DNS y latencia hacia MongoDB Atlas. |
 
-MongoDB se utiliza para actividad BIM porque sus metadatos pueden cambiar según el evento, el software o el archivo. SQL se reserva para las entidades estructuradas y transaccionales.
+---
 
-### Catálogo de insumos
+## Referencia de la API REST
 
-La aplicación lee las partidas y variaciones desde las tablas `partidas` y `variaciones_opciones` de MySQL, usando `CATALOG_DATABASE_URL`; el frontend no consulta archivos CSV. `data/catalogo/catalogo_precios_colombia.sql` es el volcado para restaurar el catálogo en SQL. El CSV se conserva como respaldo auxiliar para regenerar ese volcado si se necesita.
+Todas las peticiones que mutan estado (`POST`, `PUT`, `PATCH`, `DELETE`) exigen el encabezado `Origin` coincidente con `CORS_ORIGIN`.
 
-El buscador consulta primero coincidencias directas en SQL y, si no encuentra ninguna, compara palabras normalizadas de las partidas SQL para tolerar errores tipográficos pequeños. Las sugerencias aproximadas se identifican para que el usuario confirme la descripción antes de agregarlas.
+### Salud y diagnóstico
+- `GET /api/salud`: Estado general de la API Flask.
+- `GET /api/salud/sql`: Verifica conexión a la base de catálogo y conteo de partidas/variaciones.
+- `GET /api/salud/mongodb`: Ejecuta ping de conectividad contra MongoDB.
 
-Para revisar la conexión y cuántos registros contiene la base SQL que consulta la aplicación, abre `http://127.0.0.1:5000/api/salud/sql`. Debe responder `estado: ok` y mostrar conteos mayores que cero.
+### Autenticación y usuarios
+- `POST /api/auth/registro`: Registro de nuevos usuarios (roles permitidos: `arquitectura`, `ingenieria`, `cliente`).
+- `POST /api/auth/login`: Autenticación y emisión de cookie HttpOnly.
+- `GET /api/auth/sesion`: Información de la sesión activa y perfil del usuario.
+- `POST /api/auth/logout`: Invalidación de la cookie de sesión actual.
+- `PUT /api/auth/perfil`: Actualización de información personal.
+- `GET /api/auth/preferencias` / `PUT /api/auth/preferencias`: Consulta y actualización de preferencias de usuario.
+- `POST /api/auth/solicitar-restablecimiento`: Emisión de token temporal para recuperación de contraseña.
+- `POST /api/auth/restablecer-password`: Consumo de token y actualización de contraseña.
+- `GET /api/usuarios` *(Solo Admin)*: Listado de usuarios del sistema.
+- `POST /api/usuarios` *(Solo Admin)*: Creación de usuarios con cualquier rol (incluyendo administradores).
+- `GET /api/usuarios/{id}` / `PUT /api/usuarios/{id}` / `DELETE /api/usuarios/{id}` *(Solo Admin)*: Mantenimiento de cuentas.
 
-Para restaurar el catálogo desde el respaldo SQL con MySQL Workbench, abre la conexión y el esquema indicado por `CATALOG_DATABASE_URL`, entra a **Server → Data Import → Import from Self-Contained File**, selecciona `data/catalogo/catalogo_precios_colombia.sql`, confirma ese esquema como destino e inicia la importación. Reinicia Flask y vuelve a comprobar `/api/salud/sql`.
+### Proyectos y colaboración
+- `GET /api/proyectos`: Listado de proyectos accesibles al usuario autenticado.
+- `POST /api/proyectos`: Creación de una nueva obra (nombre, cliente, ciudad).
+- `GET /api/proyectos/{id}/presupuestos`: Historial de presupuestos y versiones de la obra.
+- `POST /api/proyectos/{id}/invitaciones`: Generación de código de invitación (validez 7 días) para colaboradores o clientes.
+- `POST /api/proyectos/invitaciones/aceptar`: Canje de código de invitación asociando al usuario al proyecto.
+- `DELETE /api/proyectos/{id}`: Eliminación de proyecto (restringido al propietario).
 
-Validar el CSV sin conectarse a MySQL:
+### Presupuestos y exportaciones
+- `GET /api/presupuestos`: Listado de presupuestos.
+- `POST /api/presupuestos`: Creación de un presupuesto para un proyecto.
+- `GET /api/presupuestos/{id}`: Detalle de partidas, insumos y cálculos del presupuesto.
+- `PUT /api/presupuestos/{id}/aiu`: Actualización de porcentajes de administración, imprevistos y utilidad (0 - 100%).
+- `POST /api/presupuestos/{id}/partidas`: Adición de partidas desde el catálogo SQL con precio verificado en servidor.
+- `POST /api/presupuestos/{id}/detalles`: Adición de renglones o insumos personalizados.
+- `DELETE /api/presupuestos/{id}/detalles/{id_detalle}`: Eliminación de un renglón del presupuesto.
+- `POST /api/presupuestos/{id}/calcular`: Recálculo y consolidación de totales.
+- `POST /api/presupuestos/{id}/duplicar`: Duplicación de versión presupuestaria.
+- `POST /api/presupuestos/{id}/importar-txt/analizar`: Análisis de tabla tabulada de Revit o Archicad con sugerencias de partidas.
+- `POST /api/presupuestos/{id}/mano-obra-asociada`: Sugerencias de jornales y cuadrillas requeridas.
+- `GET /api/presupuestos/{id}/excel`: Descarga de presupuesto en formato Excel (`.xlsx`).
+- `GET /api/presupuestos/{id}/pdf`: Descarga de presupuesto en formato PDF estructurado.
+- `GET /api/presupuestos/{id}/word`: Descarga de presupuesto editable en formato Word (`.docx`).
 
+### Catálogo de partidas e insumos
+- `GET /api/partidas`: Listado paginado de partidas del catálogo maestro.
+- `GET /api/partidas/buscar?q={termino}`: Búsqueda aproximada de partidas.
+- `GET /api/partidas/{codigo}`: Detalle técnico y opciones de variación.
+- `POST /api/partidas` *(Solo Admin)*: Creación de partida maestra.
+- `PUT /api/partidas/{codigo}` / `DELETE /api/partidas/{codigo}` *(Solo Admin)*: Modificación y baja de partidas.
+- `GET /api/insumos` / `POST /api/insumos`: Consulta y creación de insumos operacionales.
+- `POST /api/insumos/ajuste-masivo` *(Solo Admin)*: Ajuste porcentual de costos de insumos.
+
+### Actividades BIM y Dashboard
+- `POST /api/actividades-bim`: Registro de evento documental de modelado BIM en MongoDB.
+- `GET /api/actividades-bim/{id}`: Consulta de una actividad propia.
+- `PUT /api/actividades-bim/{id}` / `DELETE /api/actividades-bim/{id}`: Modificación y eliminación de actividad propia.
+- `GET /api/actividades-bim/usuario/{id_usuario}`: Historial cronológico de eventos BIM del usuario.
+- `GET /api/dashboard/resumen`: Endpoint políglota unificado con métricas de obras, presupuestos y actividad reciente.
+
+---
+
+## Pruebas y calidad de código
+
+El proyecto cuenta con una suite integral de 31 pruebas unitarias y de integración en el backend, ejecutadas con bases SQLite en memoria y simulación aislada de MongoDB mediante `mongomock`.
+
+### Ejecutar pruebas del backend
+
+Para ejecutar los tests asegurando la resolución correcta de módulos:
+
+**Opción 1 (desde la carpeta `backend`):**
 ```powershell
 Set-Location backend
-..\.venv\Scripts\python.exe -m scripts.importar_catalogo_csv --dry-run
-```
-
-Importar el catálogo en la base configurada:
-
-```powershell
-..\.venv\Scripts\python.exe -m scripts.importar_catalogo_csv
-```
-
-Para regenerar el volcado SQL desde el CSV:
-
-```powershell
-..\.venv\Scripts\python.exe -m scripts.generar_catalogo_sql
-```
-
-Los precios del archivo son valores de referencia y no constituyen una cotización vigente. El CSV trae precios unitarios de las partidas, pero no desglosa cuadrillas ni rendimientos. Para acompañar las sugerencias de mano de obra, el catálogo SQL operacional incorpora jornales de referencia por perfil y ciudad con rango, fuente, fecha y metodología; no son ofertas vinculantes ni reemplazan una cotización del contratista. Los rangos se basan en referencias públicas de mercado 2026 y se agrupan por bandas de ciudad. Revisa si incluyen prestaciones, transporte, equipos, recargos e AIU antes de usar el valor contractual.
-
-Cargar o actualizar las cotizaciones referenciales desde `backend/`:
-
-```powershell
-..\.venv\Scripts\python.exe -m scripts.cargar_cotizaciones_mano_obra
-```
-
-La carga es idempotente y escribe los perfiles sugeridos en `INSUMOS`, el precio aplicado por ciudad en `PRECIOS_CIUDAD` y el rango auditable en `COTIZACIONES_MANO_OBRA`. La interfaz muestra el rango, el valor usado, el método y el enlace a la fuente. Los perfiles sin rendimiento documentado quedan desmarcados y requieren que el usuario indique jornales; no se asume un jornal por partida. Para `ICN015`, el APU de tubería de refrigeración registra un técnico por 20 m, por lo que el presupuesto calcula `cantidad / 20` jornales. Los perfiles de montaje asociados a una partida ya valorizada de montaje no se agregan otra vez. Las sugerencias siguen siendo referencias y deben validarse según el alcance real. Fuentes consultadas: [tarifas de mano de obra por oficio y ciudad de Obra Maestra](https://obramaestra.com/co/guias/cuanto-cobrar-mano-de-obra-construccion-colombia), [APU de instalación metálica](https://www.solucionesexcel.com/apu/2741-instalacion-nave-puerta-lamina/) y [APU de tubería para refrigeración](https://solucionesexcel.com/apu/3645-ext-tuberia-cobre-1-2-3-8-rubatex/).
-
-Las recomendaciones por código y los coeficientes APU se cargan al catálogo MySQL desde `backend/`:
-
-```powershell
-..\.venv\Scripts\python.exe -m scripts.cargar_recomendaciones_mano_obra
-```
-
-Al iniciar Flask, la aplicación agrega la columna nullable `rendimiento_por_jornal` si una instalación previa todavía no la tiene. El cargador de recomendaciones actualiza `ICN015` con su fuente y rendimiento de 20 m/jornal.
-
-### Importación de cómputos TXT desde Revit y Archicad
-
-En **Proyectos y presupuestos**, selecciona un presupuesto y pulsa **Importar TXT BIM**. Elige Revit o Archicad, carga un TXT tabulado exportado desde una planificación/tabla y revisa las coincidencias sugeridas por el catálogo SQL. La aplicación reconoce columnas de elemento o tipo y cantidad/conteo, admite UTF-8, UTF-16 y Windows-1252, y limita el archivo a 5 MB y 1000 filas. Cada fila se agrega manualmente tras revisar la partida sugerida. Los precios del TXT se ignoran: el servidor toma el precio de la partida/variación SQL. Los cambios de precios y el mantenimiento de insumos quedan restringidos a administradores.
-
-### Datos de demostración y migraciones
-
-Desde `backend/`, `python -m scripts.poblar_bd` carga datos de demostración. La opción `--reset` elimina las tablas operativas antes de cargarlas.
-
-Hay scripts de migración para instalaciones anteriores. Revisa cuidadosamente sus variables de entorno y el origen/destino antes de ejecutarlos: una migración puede modificar datos persistentes.
-
-## API principal
-
-Las rutas de negocio requieren sesión, excepto las rutas de salud, registro/login y solicitud/confirmación de restablecimiento. Todas las solicitudes que cambian datos deben enviar un encabezado `Origin` permitido por `CORS_ORIGIN`; las solicitudes sin ese encabezado se rechazan para reducir el riesgo de CSRF.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/api/salud` | Estado de la API. |
-| `GET` | `/api/salud/mongodb` | Comprueba MongoDB mediante `ping`. |
-| `POST` | `/api/auth/registro` | Registra una cuenta. |
-| `POST` | `/api/auth/login` | Inicia sesión. |
-| `POST` | `/api/auth/solicitar-restablecimiento` | Solicita un enlace de recuperación sin revelar si el correo existe. |
-| `POST` | `/api/auth/restablecer-password` | Consume el token de un solo uso, válido durante 30 minutos. |
-| `GET` | `/api/auth/sesion` | Consulta la sesión actual. |
-| `POST` | `/api/auth/logout` | Cierra sesión. |
-| `GET` | `/api/dashboard/resumen` | Combina métricas SQL con perfil y actividad MongoDB. |
-| `POST` | `/api/presupuestos/{id}/partidas` | Agrega una partida del catálogo SQL con el precio asignado por el servidor. |
-| `POST` | `/api/presupuestos/{id}/importar-txt/analizar` | Analiza un TXT tabulado de Revit o Archicad y devuelve sugerencias SQL sin modificar el presupuesto. |
-| `POST` | `/api/actividades-bim` | Registra una actividad BIM en MongoDB. |
-| `POST` | `/api/proyectos/{id}/invitaciones` | El creador genera un código de un uso, válido 7 días, para arquitecto, ingeniero o cliente. |
-| `POST` | `/api/proyectos/invitaciones/aceptar` | Arquitecto, ingeniero o cliente canjea un código que debe coincidir con su rol. |
-| `GET` | `/api/actividades-bim/<id>` | Consulta una actividad propia. |
-| `PUT` | `/api/actividades-bim/<id>` | Actualiza campos permitidos de una actividad propia. |
-| `DELETE` | `/api/actividades-bim/<id>` | Elimina una actividad propia. |
-| `GET` | `/api/actividades-bim/usuario/<id>?limite=10` | Consulta el perfil y actividad reciente del usuario autorizado. |
-| `GET` | `/api/partidas` | Consulta el catálogo SQL de partidas. |
-| `POST` | `/api/partidas` | Crea una partida del catálogo maestro; solo para administradores. |
-| `PUT`, `DELETE` | `/api/partidas/<codigo>` | Actualiza o elimina una partida; solo para administradores. |
-| `GET` | `/api/presupuestos/<id>/pdf` | Descarga una exportación PDF del presupuesto, sin firma digital certificada. |
-| `GET` | `/api/presupuestos/<id>/word` | Descarga DOCX editable, sin firma digital certificada. |
-| `PUT` | `/api/presupuestos/<id>/aiu` | Actualiza administración, imprevistos y utilidad sobre costo directo; valores de 0 a 100. |
-| — | `/api/proyectos`, `/api/presupuestos`, `/api/insumos` | Gestión de entidades operativas SQL. |
-
-El CRUD documental valida los campos y comprueba la propiedad del documento. El endpoint mixto principal es `/api/dashboard/resumen`.
-
-Los códigos de proyecto se guardan en SQL solo como hash, caducan a los siete días y se consumen una sola vez. Arquitectos e ingenieros invitados pueden colaborar en partidas y el cliente solo consultar; la API aplica el permiso de solo lectura para clientes. Para probar la recuperación local sin un servidor SMTP, configura `PASSWORD_RESET_DEBUG=1` en `.env` y reinicia el backend: la página mostrará un enlace local de prueba. En producción configura SMTP y deja `PASSWORD_RESET_DEBUG=0`.
-
-Los porcentajes AIU se definen para cada presupuesto y se aplican al costo directo. No se fijan tasas por defecto ni se presentan como tarifas legales: deben corresponder a las condiciones de cada obra y contrato. Los formatos PDF y Word incluyen el desglose; ninguno queda firmado digitalmente.
-
-## Pruebas y calidad
-
-El contrato OpenAPI en `docs/api/openapi.yaml` se valida en CI con `openapi-spec-validator`. El flujo ejecuta además `pip-audit` y `npm audit`; consulta el resultado del workflow de GitHub Actions para el estado vigente de dependencias. La comprobación a Atlas es externa a CI y debe ejecutarse desde el entorno de despliegue con su URI secreta configurada.
-
-Ejecutar las pruebas del backend desde `backend/`:
-
-```powershell
 ..\.venv\Scripts\python.exe -m pytest -q
+Set-Location ..
 ```
 
-Ejecutar lint y compilación del frontend desde `frontend-bimetrics/`:
+**Opción 2 (desde la raíz del proyecto):**
+```powershell
+.\.venv\Scripts\python.exe -m pytest backend -o pythonpath=backend -q
+```
+
+### Ejecutar validaciones del frontend
+
+Desde la carpeta `frontend-bimetrics`:
 
 ```powershell
-npm run lint
-npm run build
+# Verificación estática con ESLint
+npm --prefix frontend-bimetrics run lint
+
+# Compilación de producción con Vite
+npm --prefix frontend-bimetrics run build
 ```
 
-Verificación del cierre: **31 pruebas aprobadas**. Las pruebas usan SQLite en memoria y MongoDB simulado; no son una prueba de conexión real a Atlas.
+### Integración Continua (CI)
 
-Para documentar una ejecución contra Atlas, registra capturas reales de:
+El flujo de GitHub Actions en `.github/workflows/quality-security.yml` valida automáticamente en cada push y PR:
+- Ejecución de pruebas del backend con pytest.
+- Validación del contrato OpenAPI mediante `openapi-spec-validator`.
+- Auditoría de vulnerabilidades en dependencias Python con `pip-audit`.
+- Linting y build de producción del frontend.
+- Auditoría de seguridad en paquetes npm con `npm audit`.
 
-1. `GET /api/salud/mongodb` con respuesta exitosa.
-2. Un documento de actividad en Atlas Data Explorer.
-3. `GET /api/dashboard/resumen` mostrando datos de ambas persistencias.
+---
 
-Oculta URI, contraseñas, tokens y datos personales en las capturas.
+## Solución de problemas comunes
 
-## Solución de problemas
+### 1. `RuntimeError: Configura SECRET_KEY con un valor aleatorio y privado`
+- Asegúrate de haber copiado `.env.example` a `.env` en la raíz del proyecto y de que `SECRET_KEY` tenga un valor configurado (mínimo 32 caracteres en producción).
 
-### `SECRET_KEY` faltante
+### 2. `ModuleNotFoundError: No module named 'app'` al ejecutar pytest
+- Pytest necesita reconocer el paquete `backend` en su ruta de importación. Ejecuta `pytest` situándote dentro de `backend/` o añade `-o pythonpath=backend` al comando ejecutado desde la raíz.
 
-Comprueba que `.env` exista en la raíz y que contenga una `SECRET_KEY` no vacía.
+### 3. Error HTTP 503 en `/api/salud/mongodb`
+- Si usas MongoDB Atlas, verifica que tu dirección IP pública actual esté autorizada en **Network Access** en la consola de Atlas.
+- Si tu proveedor de internet bloquea resoluciones DNS SRV (`mongodb+srv`), define en `.env`:
+  ```dotenv
+  MONGO_DNS_SERVERS=1.1.1.1,8.8.8.8
+  ```
+- Si deseas trabajar offline, ejecuta `.\start_local.ps1` para usar MongoDB en Docker.
 
-### MongoDB aparece desconectado
+### 4. Error HTTP 403 con mensaje `"Origen no permitido"`
+- Las solicitudes de mutación (`POST`, `PUT`, `DELETE`) validan el encabezado `Origin`. Comprueba que `CORS_ORIGIN` en `.env` contenga la URL exacta desde la que navegas (por ejemplo `http://localhost:5173`).
 
-1. Comprueba que la URI de `MONGO_URI` corresponda al clúster y al usuario de **Database Access**.
-2. Confirma que la IP de salida de tu red esté permitida en Atlas **Network Access**.
-3. Comprueba `GET /api/salud/mongodb` y revisa la terminal del backend.
-4. Si Atlas no es accesible desde esa red, usa el modo local con Docker.
+### 5. `HTTP 503` en `/api/salud/sql`
+- Revisa las credenciales de conexión en `CATALOG_DATABASE_URL` y asegúrate de que el servicio MySQL esté en ejecución y con el esquema restaurado.
 
-Que Flask inicie no garantiza que MongoDB esté conectado; la ruta de salud ejecuta la comprobación efectiva.
+---
 
-### MySQL no está disponible
+## Documentación técnica
 
-Revisa el servicio MySQL, host, puerto, usuario, contraseña y nombre de la base en `CATALOG_DATABASE_URL` o en las variables `MYSQL_*`. Para desarrollo local puedes iniciar el catálogo SQLite mediante `start_local.ps1`.
+En el directorio [`docs/`](docs/) se encuentran los documentos técnicos y legales del proyecto:
 
-## Entrega 3
+- [Contrato formal de la API (OpenAPI 3.0)](docs/api/openapi.yaml)
+- [Arquitectura de API y control de acceso (RBAC)](docs/arquitectura/api-y-control-acceso.md)
+- [Arquitectura de persistencia políglota (SQL + NoSQL)](docs/arquitectura/persistencia-poliglota.md)
+- [Diccionario y esquema relacional de datos (CSV)](docs/diagramas/esquema_presupuestos_lucidchart.csv)
+- [Política de tratamiento de datos personales](docs/legal/politica-tratamiento-datos.md)
+- [Términos y condiciones de uso](docs/legal/terminos-condiciones.md)
 
-Consulta el [cierre de seguridad, casos de uso y evidencias](docs/entrega-3/README.md).
-
-## Documentación
-
-- [Contrato OpenAPI](docs/api/openapi.yaml)
-- [API y control de acceso](docs/arquitectura/api-y-control-acceso.md)
-- [Arquitectura de persistencia políglota](docs/arquitectura/persistencia-poliglota.md)
-- [Diagrama del esquema SQL](docs/diagramas/esquema_presupuestos_lucidchart.csv)
-- [Justificación de persistencia NoSQL (PDF)](docs/entregables/justificacion_persistencia_poliglota.pdf)
+---
 
 ## Seguridad
 
-- No subas `.env`, URI de MongoDB ni credenciales al repositorio.
-- Usa una clave `SECRET_KEY` privada y aleatoria.
-- En producción, define `BIMETRICS_ENV=production`, sirve mediante HTTPS y activa `SESSION_COOKIE_SECURE=1`.
-- Restringe el acceso de red de Atlas a las IP necesarias.
+- **Variables confidenciales:** El archivo `.env` nunca debe subirse al control de versiones.
+- **Manejo de contraseñas:** Todas las credenciales de usuario se almacenan con algoritmos de hashing seguros (`generate_password_hash` con Werkzeug).
+- **Protección de cookies de sesión:** Las cookies de sesión están marcadas como `HttpOnly` y `SameSite=Lax`. En entornos de producción (`BIMETRICS_ENV=production`), se exige `SESSION_COOKIE_SECURE=1` sobre HTTPS.
+- **Validación de entradas y saneamiento:** Se restringe la longitud de campos, tipos numéricos y tamaño máximo de carga (6 MB) para mitigar vectores de denegación de servicio.
