@@ -230,9 +230,11 @@ Para evaluar o demostrar la plataforma, se recomienda seguir el siguiente guion 
 |---|---|---|
 | **Seguridad y RBAC** | Intentar consultar proyectos sin sesión activa. Iniciar sesión como `cliente` e intentar crear o modificar una partida de catálogo. | Respuesta `HTTP 401 Unauthorized` sin sesión. Respuesta `HTTP 403 Forbidden` en escrituras del cliente. |
 | **CU-01 · Catálogo de partidas** | Como administrador, acceder a `/api/partidas` o al panel de partidas, crear una partida nueva, buscarla, editar su precio de referencia y eliminar una partida de prueba. | Operaciones exitosas con códigos HTTP 201, 200 y 204. Solo accesible a administradores. |
-| **CU-02 · Cálculo y AIU** | Crear un presupuesto, asociar una partida (ej. 20 m de tubería o mampostería), configurar AIU (10% administración, 3% imprevistos, 7% utilidad) y solicitar el cálculo. | Desglose exacto de costo directo, valor de AIU y valor total de la obra. |
-| **CU-03 · Exportación de documentos** | En la vista de presupuesto, descargar las versiones en **Excel (.xlsx)**, **Word (.docx)** y **PDF**. | Los tres archivos se generan y descargan correctamente con el desglose del presupuesto y resumen de AIU. |
-| **CU-04 · Historial y duplicación** | Duplicar un presupuesto existente dentro del proyecto y consultar la trazabilidad. | Se genera un duplicado independiente actualizando los precios unitarios vigentes según la base destino. |
+| **CU-02 · Cálculo y AIU** | Crear un presupuesto, asociar partidas con variaciones y capítulos de obra, añadir mano de obra, configurar AIU y solicitar el cálculo. | Desglose de costo directo, mano de obra, valores AIU y total de la obra. |
+| **CU-03 · Exportación de documentos** | Descargar el presupuesto como **Excel (.xlsx)**, **Word (.docx)** y **PDF**. | Archivos con el detalle agrupado por capítulos y resumen AIU. Las descargas no contienen firma digital certificada. |
+| **CU-04 · Historial y duplicación** | Filtrar el historial por cliente y fechas; duplicar un presupuesto en la misma obra o crear otra obra a partir de él. | Historial filtrado y copia independiente con precios vigentes para la ciudad de destino. |
+| **CU-05 · Administración de catálogo** | Como administrador, crear/editar/eliminar partidas, archivar/reactivar insumos operativos y ajustar precios por ciudad. | Solo una cuenta administradora puede cambiar el catálogo y sus precios; archivar conserva los presupuestos históricos. |
+| **CU-06 · Colaboración y roles** | Generar un código de invitación para arquitectura, ingeniería o cliente y canjearlo desde la cuenta invitada. | Profesionales pueden colaborar en partidas; el cliente consulta el presupuesto en modo de solo lectura. |
 | **Persistencia políglota** | Registrar un evento de actividad BIM vinculado a la obra y consultar `GET /api/dashboard/resumen`. | El dashboard devuelve una respuesta unificada que integra métricas transaccionales SQL y el historial documental NoSQL de MongoDB. |
 
 ### Prueba de endpoints protegidos por API
@@ -460,6 +462,7 @@ En el directorio [`docs/`](docs/) se encuentran los documentos técnicos y legal
 - [Contrato formal de la API (OpenAPI 3.0)](docs/api/openapi.yaml)
 - [Arquitectura de API y control de acceso (RBAC)](docs/arquitectura/api-y-control-acceso.md)
 - [Arquitectura de persistencia políglota (SQL + NoSQL)](docs/arquitectura/persistencia-poliglota.md)
+- [Trazabilidad de casos de uso y guion de cierre funcional](docs/entrega-3/README.md)
 - [Diccionario y esquema relacional de datos (CSV)](docs/diagramas/esquema_presupuestos_lucidchart.csv)
 - [Política de tratamiento de datos personales](docs/legal/politica-tratamiento-datos.md)
 - [Términos y condiciones de uso](docs/legal/terminos-condiciones.md)

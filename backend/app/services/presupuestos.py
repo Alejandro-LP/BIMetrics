@@ -63,7 +63,7 @@ def presupuesto_completo(con, id_pres):
         "COALESCE(i.unidad_medida, 'Ud') AS unidad_medida, d.cantidad, "
         "d.costo_unitario_aplicado, ROUND(d.cantidad * d.costo_unitario_aplicado, 2) AS subtotal "
         "FROM DETALLE_PRESUPUESTO d LEFT JOIN INSUMOS i ON i.id_insumo = d.id_insumo "
-        "WHERE d.id_presupuesto = :p ORDER BY d.id_detalle"), {"p": id_pres}))
+        "WHERE d.id_presupuesto = :p ORDER BY COALESCE(d.capitulo, ''), d.id_detalle"), {"p": id_pres}))
     p["costo_directo"] = float(_dinero(sum((Decimal(str(linea.get("subtotal") or 0)) for linea in p["detalle"]), Decimal("0.00"))))
     for etiqueta, columna in (("administracion", "porcentaje_administracion"),
                               ("imprevistos", "porcentaje_imprevistos"),

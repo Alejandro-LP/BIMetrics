@@ -156,6 +156,7 @@ def agregar_detalle(id):
         datos["id_insumo"],
         datos["cantidad"],
         lineas_mano_obra=lineas_mano_obra,
+        capitulo=datos.get("capitulo"),
     )
     return jsonify(resultado), 201
 
@@ -177,6 +178,7 @@ def agregar_partida_catalogo(id):
         datos["cantidad"],
         variacion_id=datos.get("variacion_id"),
         lineas_mano_obra=lineas_mano_obra,
+        capitulo=datos.get("capitulo"),
     )
     return jsonify(resultado), 201
 

@@ -53,7 +53,14 @@ def exportar_presupuesto_pdf(presupuesto):
         return f"$ {float(valor or 0):,.0f}".replace(",", ".")
 
     filas = [["#", "Insumo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"]]
+    filas_capitulo = []
+    capitulo_anterior = None
     for indice, linea in enumerate(presupuesto.get("detalle") or [], start=1):
+        capitulo = (linea.get("capitulo") or "").strip()
+        if capitulo and capitulo != capitulo_anterior:
+            filas_capitulo.append(len(filas))
+            filas.append([Paragraph(f"<b>CAPÍTULO · {escape(capitulo)}</b>", celda), "", "", "", "", ""])
+        capitulo_anterior = capitulo or capitulo_anterior
         filas.append([
             str(indice),
             Paragraph(escape(str(linea.get("nombre_insumo") or "")), celda),
@@ -63,7 +70,7 @@ def exportar_presupuesto_pdf(presupuesto):
             Paragraph(moneda(linea.get("subtotal")), celda_derecha),
         ])
     tabla = Table(filas, colWidths=[8 * mm, 58 * mm, 17 * mm, 22 * mm, 34 * mm, 37 * mm], repeatRows=1)
-    tabla.setStyle(TableStyle([
+    estilo_tabla = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -73,7 +80,16 @@ def exportar_presupuesto_pdf(presupuesto):
         ("ALIGN", (0, 0), (0, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-    ]))
+    ]
+    for fila_capitulo in filas_capitulo:
+        estilo_tabla.extend([
+            ("SPAN", (0, fila_capitulo), (-1, fila_capitulo)),
+            ("BACKGROUND", (0, fila_capitulo), (-1, fila_capitulo), colors.HexColor("#DBEAFE")),
+            ("TEXTCOLOR", (0, fila_capitulo), (-1, fila_capitulo), colors.HexColor("#1E3A8A")),
+            ("FONTNAME", (0, fila_capitulo), (-1, fila_capitulo), "Helvetica-Bold"),
+            ("ALIGN", (0, fila_capitulo), (-1, fila_capitulo), "LEFT"),
+        ])
+    tabla.setStyle(TableStyle(estilo_tabla))
     historia.append(tabla)
     historia.append(Spacer(1, 5 * mm))
     resumen = [["Costo directo", moneda(presupuesto.get("costo_directo"))]]

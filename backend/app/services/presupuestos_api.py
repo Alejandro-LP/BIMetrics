@@ -156,6 +156,7 @@ def agregar_linea_presupuesto(id_presupuesto, id_usuario, id_insumo, cantidad, l
                 linea["id_insumo"],
                 linea["cantidad"],
                 ciudad,
+                capitulo,
             )
         recalcular(connection, id_presupuesto)
         return presupuesto_completo(connection, id_presupuesto)
@@ -193,7 +194,7 @@ def agregar_partida_catalogo_presupuesto(
         agregar_linea(connection, id_presupuesto, id_insumo, cantidad, ciudad, capitulo)
 
         for linea in lineas_mano_obra or []:
-            agregar_linea(connection, id_presupuesto, linea["id_insumo"], linea["cantidad"], ciudad)
+            agregar_linea(connection, id_presupuesto, linea["id_insumo"], linea["cantidad"], ciudad, capitulo)
 
         codigo_mano_obra = MANO_OBRA_ASOCIADA.get(partida.codigo)
         if codigo_mano_obra:
@@ -207,7 +208,7 @@ def agregar_partida_catalogo_presupuesto(
             mano_obra = db.session.get(Partida, codigo_mano_obra)
             if not ya_agregada and mano_obra:
                 id_mano_obra = _crear_o_buscar_insumo_de_partida(connection, mano_obra, ciudad)
-                agregar_linea(connection, id_presupuesto, id_mano_obra, cantidad, ciudad)
+                agregar_linea(connection, id_presupuesto, id_mano_obra, cantidad, ciudad, capitulo)
 
         recalcular(connection, id_presupuesto)
         return presupuesto_completo(connection, id_presupuesto)

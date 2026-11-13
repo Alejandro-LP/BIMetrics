@@ -29,7 +29,21 @@ def exportar_presupuesto_word(presupuesto):
     tabla.style = "Light Shading Accent 1"
     for celda, texto in zip(tabla.rows[0].cells, ("#", "Insumo", "Unidad", "Cantidad", "Precio unitario", "Subtotal")):
         celda.text = texto
+    capitulo_anterior = None
     for indice, linea in enumerate(presupuesto.get("detalle") or [], 1):
+        capitulo = (linea.get("capitulo") or "").strip()
+        if capitulo and capitulo != capitulo_anterior:
+            celdas_capitulo = tabla.add_row().cells
+            celda_capitulo = celdas_capitulo[0].merge(celdas_capitulo[-1])
+            celda_capitulo.text = f"CAPÍTULO · {capitulo}"
+            for corrida in celda_capitulo.paragraphs[0].runs:
+                corrida.bold = True
+            from docx.oxml import OxmlElement
+            from docx.oxml.ns import qn
+            sombreado = OxmlElement("w:shd")
+            sombreado.set(qn("w:fill"), "DBEAFE")
+            celda_capitulo._tc.get_or_add_tcPr().append(sombreado)
+        capitulo_anterior = capitulo or capitulo_anterior
         celdas = tabla.add_row().cells
         valores = (indice, linea.get("nombre_insumo", ""), linea.get("unidad_medida", ""),
                    linea.get("cantidad", 0), linea.get("costo_unitario_aplicado", 0), linea.get("subtotal", 0))

@@ -72,8 +72,11 @@ function ProjectBudgetWorkspace({ user }) {
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [budgets, setBudgets] = useState([])
   const [selectedBudgetId, setSelectedBudgetId] = useState('')
+  const [historyFilters, setHistoryFilters] = useState({ cliente: '', desde: '', hasta: '' })
   const [budget, setBudget] = useState(null)
   const [catalogData, setCatalogData] = useState({ city: '', items: [] })
+  const [adminOperationalItems, setAdminOperationalItems] = useState([])
+  const [bulkPricePercent, setBulkPricePercent] = useState('')
   const [masterPartidas, setMasterPartidas] = useState([])
   const [masterPartidaSearch, setMasterPartidaSearch] = useState('')
   const [masterPartidasLoading, setMasterPartidasLoading] = useState(false)
@@ -113,8 +116,9 @@ function ProjectBudgetWorkspace({ user }) {
   const [txtLoading, setTxtLoading] = useState(false)
   const [txtAdding, setTxtAdding] = useState(null)
   const [newCatalogItem, setNewCatalogItem] = useState(false)
+  const [catalogDialog, setCatalogDialog] = useState(null)
   const [projectForm, setProjectForm] = useState({ nombre_obra: '', ciudad: 'Bogotá', cliente: '' })
-  const [lineForm, setLineForm] = useState({ id_insumo: '', cantidad: '' })
+  const [lineForm, setLineForm] = useState({ id_insumo: '', cantidad: '', capitulo: '' })
   const [newItemForm, setNewItemForm] = useState({ nombre_insumo: '', unidad_medida: '', costo_unitario: '' })
   const [busyAction, setBusyAction] = useState('')
   const noticeTimerRef = useRef(null)
@@ -194,6 +198,15 @@ function ProjectBudgetWorkspace({ user }) {
       })
     return () => controller.abort()
   }, [project?.ciudad])
+
+  useEffect(() => {
+    if (!isAdmin || !project?.ciudad) return undefined
+    const controller = new AbortController()
+    apiRequest(`/insumos?ciudad=${encodeURIComponent(project.ciudad)}&incluir_inactivos=1`, { signal: controller.signal })
+      .then((items) => { if (!controller.signal.aborted) setAdminOperationalItems(items) })
+      .catch((loadError) => { if (loadError.name !== 'AbortError') setError(loadError.message) })
+    return () => controller.abort()
+  }, [isAdmin, project?.ciudad])
 
   const projectId = project?.id_proyecto
   useEffect(() => {
@@ -653,6 +666,65 @@ function ProjectBudgetWorkspace({ user }) {
     }
   }
 
+  async function saveCatalogPartida(event) {
+    event.preventDefault()
+    if (!catalogDialog || !isAdmin) return
+    setBusyAction('catalog')
+    try {
+      const { mode, partida } = catalogDialog
+      const payload = { ...partida, precio_defecto: Number(partida.precio_defecto) }
+      const saved = await apiRequest(mode === 'create' ? '/partidas' : `/partidas/${encodeURIComponent(partida.codigo)}`, {
+        method: mode === 'create' ? 'POST' : 'PUT',
+        body: JSON.stringify(payload),
+      })
+      setMasterPartidas((items) => mode === 'create'
+        ? [...items.filter((item) => item.codigo !== saved.codigo), saved].sort((a, b) => a.codigo.localeCompare(b.codigo))
+        : items.map((item) => item.codigo === saved.codigo ? saved : item))
+      setCatalogDialog(null)
+      announce(mode === 'create' ? 'Partida creada en el catálogo SQL.' : 'Partida actualizada en el catálogo SQL.')
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
+    finally { setBusyAction('') }
+  }
+
+  async function deleteCatalogPartida(partida) {
+    if (!isAdmin || !window.confirm(`¿Eliminar la partida ${partida.codigo} del catálogo maestro?`)) return
+    try {
+      await apiRequest(`/partidas/${encodeURIComponent(partida.codigo)}`, { method: 'DELETE' })
+      setMasterPartidas((items) => items.filter((item) => item.codigo !== partida.codigo))
+      announce('Partida eliminada del catálogo SQL.')
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
+  }
+
+  async function toggleOperationalItem(item) {
+    try {
+      const updated = await apiRequest(`/insumos/${item.id_insumo}/estado`, {
+        method: 'PATCH', body: JSON.stringify({ activo: !item.activo }),
+      })
+      setAdminOperationalItems((items) => items.map((candidate) => candidate.id_insumo === updated.id_insumo ? updated : candidate))
+      setCatalogData((data) => ({ ...data, items: updated.activo ? [...data.items.filter((candidate) => candidate.id_insumo !== updated.id_insumo), updated] : data.items.filter((candidate) => candidate.id_insumo !== updated.id_insumo) }))
+      announce(updated.activo ? 'Insumo reactivado.' : 'Insumo archivado; se conserva en presupuestos anteriores.')
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
+  }
+
+  async function applyBulkPriceAdjustment() {
+    if (!project?.ciudad || bulkPricePercent === '') return
+    const porcentaje = Number(bulkPricePercent)
+    if (!Number.isFinite(porcentaje) || porcentaje < -100 || porcentaje > 500) {
+      toast.error('El ajuste debe estar entre -100 % y 500 %.')
+      return
+    }
+    if (!window.confirm(`¿Aplicar ${porcentaje}% a todos los precios de ${project.ciudad}? Esta acción modifica el catálogo.`)) return
+    try {
+      const result = await apiRequest('/insumos/precios/ajuste-masivo', {
+        method: 'PUT', body: JSON.stringify({ ciudad: project.ciudad, porcentaje }),
+      })
+      const refreshed = await apiRequest(`/insumos?ciudad=${encodeURIComponent(project.ciudad)}`)
+      setCatalogData({ city: project.ciudad, items: refreshed })
+      setBulkPricePercent('')
+      announce(`Ajuste aplicado a ${result.precios_actualizados} precios de ${result.ciudad}.`)
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
+  }
+
   async function createLine(event) {
     event.preventDefault()
     if (!budget) return
@@ -674,6 +746,7 @@ function ProjectBudgetWorkspace({ user }) {
             codigo: selectedPartida.codigo,
             variacion_id: selectedVariationId ? Number(selectedVariationId) : null,
             cantidad: Number(lineForm.cantidad),
+            capitulo: lineForm.capitulo,
             lineas_mano_obra: laborLines,
           }),
         })
@@ -685,13 +758,13 @@ function ProjectBudgetWorkspace({ user }) {
         })
         updated = await apiRequest(`/presupuestos/${budget.id_presupuesto}/detalle`, {
           method: 'POST',
-          body: JSON.stringify({ id_insumo: item.id_insumo, cantidad: Number(lineForm.cantidad), lineas_mano_obra: laborLines }),
+          body: JSON.stringify({ id_insumo: item.id_insumo, cantidad: Number(lineForm.cantidad), capitulo: lineForm.capitulo, lineas_mano_obra: laborLines }),
         })
       }
       setBudget(updated)
       setBudgets((items) => items.map((item) => item.id_presupuesto === updated.id_presupuesto ? updated : item))
       setLineDialog(false)
-      setLineForm({ id_insumo: '', cantidad: '' })
+      setLineForm({ id_insumo: '', cantidad: '', capitulo: '' })
       setSelectedPartidaCode('')
       setSelectedPartidaDetail(null)
       setSelectedVariationId('')
@@ -737,6 +810,51 @@ function ProjectBudgetWorkspace({ user }) {
       setSelectedBudgetId(String(copy.id_presupuesto))
       setBudget(copy)
       announce('Copia creada con los precios vigentes del catálogo.')
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
+    finally { setBusyAction('') }
+  }
+
+  async function duplicateToNewProject() {
+    if (!budget || !project) return
+    const nombre = window.prompt('Nombre de la nueva obra:', `${project.nombre_obra} (copia)`)
+    if (!nombre?.trim()) return
+    const cliente = window.prompt('Cliente de la nueva obra (opcional):', project.cliente || '')
+    if (cliente === null) return
+    setBusyAction('duplicate')
+    try {
+      const copy = await apiRequest(`/presupuestos/${budget.id_presupuesto}/duplicar`, {
+        method: 'POST',
+        body: JSON.stringify({ nuevo_proyecto: { nombre_obra: nombre.trim(), ciudad: project.ciudad, cliente: cliente.trim() || null } }),
+      })
+      const refreshedProjects = await apiRequest('/proyectos')
+      setProjects(refreshedProjects)
+      const createdProject = refreshedProjects.find((item) => String(item.id_proyecto) === String(copy.id_proyecto))
+      if (createdProject) {
+        setSelectedProjectId(String(createdProject.id_proyecto))
+        setBudgets([copy])
+        setSelectedBudgetId(String(copy.id_presupuesto))
+        setBudget(copy)
+      }
+      announce('Presupuesto duplicado en una nueva obra con los precios vigentes del catálogo.')
+    } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
+    finally { setBusyAction('') }
+  }
+
+  async function applyHistoryFilters(event) {
+    event.preventDefault()
+    if (!selectedProjectId) return
+    setBusyAction('history')
+    try {
+      const params = new URLSearchParams()
+      if (historyFilters.cliente.trim()) params.set('cliente', historyFilters.cliente.trim())
+      if (historyFilters.desde) params.set('desde', historyFilters.desde)
+      if (historyFilters.hasta) params.set('hasta', historyFilters.hasta)
+      const result = await apiRequest(`/proyectos/${selectedProjectId}/presupuestos?${params}`)
+      setBudgets(result)
+      setSelectedBudgetId(result.length ? String(result[0].id_presupuesto) : '')
+      setBudget(null)
+      setBudgetLoading(Boolean(result.length))
+      announce(`${result.length} presupuesto(s) encontrados con esos filtros.`)
     } catch (actionError) { setError(actionError.message); toast.error(actionError.message) }
     finally { setBusyAction('') }
   }
@@ -810,6 +928,12 @@ function ProjectBudgetWorkspace({ user }) {
               </GlassSelect>
               {canEdit && <button type="button" onClick={createBudget} disabled={busyAction === 'create-budget'} className="mb-0.5 shrink-0 rounded-xl border border-white/10 px-3 py-2.5 text-xs text-slate-300 hover:bg-white/[0.05]">Nuevo</button>}
             </div>
+            <form onSubmit={applyHistoryFilters} className="grid gap-3 border-t border-white/[0.07] pt-4 sm:grid-cols-[1.2fr_1fr_1fr_auto] md:col-span-2">
+              <label className="block text-xs text-slate-400">Filtrar historial por cliente<input value={historyFilters.cliente} onChange={(event) => setHistoryFilters({ ...historyFilters, cliente: event.target.value })} maxLength={150} placeholder="Nombre del cliente" className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+              <label className="block text-xs text-slate-400">Desde<input type="date" value={historyFilters.desde} onChange={(event) => setHistoryFilters({ ...historyFilters, desde: event.target.value })} className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+              <label className="block text-xs text-slate-400">Hasta<input type="date" value={historyFilters.hasta} onChange={(event) => setHistoryFilters({ ...historyFilters, hasta: event.target.value })} className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white" /></label>
+              <div className="flex items-end gap-2"><button type="submit" disabled={busyAction === 'history'} className="rounded-lg border border-indigo-300/20 px-3 py-2.5 text-xs font-semibold text-indigo-100 hover:bg-indigo-300/[0.08] disabled:opacity-50">{busyAction === 'history' ? 'Filtrando…' : 'Filtrar'}</button><button type="button" onClick={() => { setHistoryFilters({ cliente: '', desde: '', hasta: '' }); setBusyAction('history'); apiRequest(`/presupuestos?id_proyecto=${encodeURIComponent(selectedProjectId)}`).then((items) => { setBudgets(items); setSelectedBudgetId(items.length ? String(items[0].id_presupuesto) : ''); setBudget(null); setBudgetLoading(Boolean(items.length)) }).catch((actionError) => setError(actionError.message)).finally(() => setBusyAction('')) }} className="rounded-lg border border-white/10 px-3 py-2.5 text-xs text-slate-300 hover:bg-white/[0.04]">Limpiar</button></div>
+            </form>
           </div>
         ) : <EmptyState title="Todavía no hay proyectos" description="Crea una obra para organizar sus presupuestos y actividad BIM." action="Crear proyecto" onAction={() => setProjectDialog(true)} />}
       </GlassCard>
@@ -823,6 +947,7 @@ function ProjectBudgetWorkspace({ user }) {
             {canEdit && budget && missingAssociatedLabor.length > 0 && <button type="button" disabled={Boolean(busyAction)} onClick={addScaffoldLabor} className="budget-action-labor inline-flex items-center justify-center rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] px-4 py-2.5 text-xs font-semibold text-emerald-100">{busyAction === 'scaffold-labor' ? 'Agregando mano de obra…' : 'Agregar montaje de equipo'}</button>}
             <button type="button" disabled={!budget || Boolean(busyAction)} title={!budget ? 'Crea o selecciona un presupuesto para continuar' : undefined} onClick={recalculate} className="budget-action-secondary inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-xs font-semibold">Recalcular</button>
             {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} title={!budget ? 'Crea o selecciona un presupuesto para continuar' : undefined} onClick={duplicateBudget} className="budget-action-secondary inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-xs font-semibold">Duplicar</button>}
+            {canEdit && <button type="button" disabled={!budget || Boolean(busyAction)} title={!budget ? 'Crea o selecciona un presupuesto para continuar' : undefined} onClick={duplicateToNewProject} className="budget-action-secondary inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-xs font-semibold">Duplicar a otra obra</button>}
             {canEdit && budget && <button type="button" disabled={Boolean(busyAction)} onClick={openAiuEditor} className="budget-action-secondary inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-xs font-semibold">AIU</button>}
             <button type="button" disabled={!budget || Boolean(busyAction)} title={!budget ? 'Crea o selecciona un presupuesto para continuar' : undefined} onClick={() => exportDocument('excel')} className="budget-action-secondary inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-xs font-semibold">Excel</button>
             <button type="button" disabled={!budget || Boolean(busyAction)} title={!budget ? 'Crea o selecciona un presupuesto para continuar' : undefined} onClick={() => exportDocument('pdf')} className="budget-action-secondary inline-flex items-center justify-center rounded-xl border px-4 py-2.5 text-xs font-semibold">PDF</button>
@@ -845,11 +970,12 @@ function ProjectBudgetWorkspace({ user }) {
           <div className="mt-2 flex flex-wrap gap-2">{duplicateAssociatedLaborLines.map((line) => <button key={line.id_detalle} type="button" disabled={!canEdit || Boolean(busyAction)} onClick={() => removeLine(line)} className="rounded-md border border-amber-200/20 px-2.5 py-1.5 text-[11px] text-amber-100 hover:bg-amber-200/10 disabled:opacity-50">Quitar duplicado: {line.nombre_insumo}</button>)}</div>
         </div>}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-xs">
-            <thead className="bg-white/[0.025] text-[10px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-5 py-3 font-semibold sm:px-6">Insumo</th><th className="px-3 py-3 font-semibold">Unidad</th><th className="px-3 py-3 text-right font-semibold">Cantidad</th><th className="px-3 py-3 text-right font-semibold">Costo unitario</th><th className="px-3 py-3 text-right font-semibold">Subtotal</th><th className="px-4 py-3" /></tr></thead>
+          <table className="w-full min-w-[900px] text-left text-xs">
+            <thead className="bg-white/[0.025] text-[10px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-5 py-3 font-semibold sm:px-6">Capítulo</th><th className="px-5 py-3 font-semibold sm:px-6">Insumo</th><th className="px-3 py-3 font-semibold">Unidad</th><th className="px-3 py-3 text-right font-semibold">Cantidad</th><th className="px-3 py-3 text-right font-semibold">Costo unitario</th><th className="px-3 py-3 text-right font-semibold">Subtotal</th><th className="px-4 py-3" /></tr></thead>
             <tbody className="divide-y divide-white/[0.06]">
               {lines.map((line, index) => (
                 <tr key={line.id_detalle || index} className="text-slate-300 transition hover:bg-white/[0.02]">
+                  <td className="px-5 py-3.5 text-slate-400 sm:px-6">{line.capitulo || 'Sin capítulo'}</td>
                   <td className="max-w-[280px] px-5 py-3.5 font-medium text-slate-200 sm:px-6" title={line.nombre_insumo}>
                     <span className="block truncate">{line.nombre_insumo}</span>
                   </td>
@@ -875,7 +1001,7 @@ function ProjectBudgetWorkspace({ user }) {
               ))}
               {(!lines.length) && (
                 <tr>
-                  <td colSpan="6" className="px-6 py-10 text-center text-slate-500">
+                  <td colSpan="7" className="px-6 py-10 text-center text-slate-500">
                     {budgetLoading
                       ? `Cargando presupuesto de ${project?.nombre_obra || 'la obra'}…`
                       : budget
@@ -889,17 +1015,19 @@ function ProjectBudgetWorkspace({ user }) {
                 </tr>
               )}
             </tbody>
-            {budget && <tfoot><tr className="border-t border-white/10"><td colSpan="4" className="px-5 py-2 text-right text-slate-400 sm:px-6">Costo directo</td><td className="px-3 py-2 text-right tabular-nums text-slate-300">{currency.format(Number(budget.costo_directo) || 0)}</td><td /></tr>{[['administracion', 'Administración'], ['imprevistos', 'Imprevistos'], ['utilidad', 'Utilidad']].map(([key, label]) => <tr key={key}><td colSpan="4" className="px-5 py-1.5 text-right text-slate-500 sm:px-6">{label} ({Number(budget[`porcentaje_${key}`]) || 0}%)</td><td className="px-3 py-1.5 text-right tabular-nums text-slate-400">{currency.format(Number(budget[`valor_${key}`]) || 0)}</td><td /></tr>)}<tr className="border-t border-white/10 bg-white/[0.02]"><td colSpan="4" className="px-5 py-4 text-right font-semibold text-slate-300 sm:px-6">Total del presupuesto</td><td className="px-3 py-4 text-right text-sm font-semibold text-white">{currency.format(Number(budget.costo_total) || 0)}</td><td /></tr></tfoot>}
+            {budget && <tfoot><tr className="border-t border-white/10"><td colSpan="5" className="px-5 py-2 text-right text-slate-400 sm:px-6">Costo directo</td><td className="px-3 py-2 text-right tabular-nums text-slate-300">{currency.format(Number(budget.costo_directo) || 0)}</td><td /></tr>{[['administracion', 'Administración'], ['imprevistos', 'Imprevistos'], ['utilidad', 'Utilidad']].map(([key, label]) => <tr key={key}><td colSpan="5" className="px-5 py-1.5 text-right text-slate-500 sm:px-6">{label} ({Number(budget[`porcentaje_${key}`]) || 0}%)</td><td className="px-3 py-1.5 text-right tabular-nums text-slate-400">{currency.format(Number(budget[`valor_${key}`]) || 0)}</td><td /></tr>)}<tr className="border-t border-white/10 bg-white/[0.02]"><td colSpan="5" className="px-5 py-4 text-right font-semibold text-slate-300 sm:px-6">Total del presupuesto</td><td className="px-3 py-4 text-right text-sm font-semibold text-white">{currency.format(Number(budget.costo_total) || 0)}</td><td /></tr></tfoot>}
           </table>
         </div>
       </GlassCard>
 
+      {catalogDialog && <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"><GlassCard role="dialog" aria-modal="true" aria-labelledby="catalog-editor-title" className="w-full max-w-xl p-6"><div className="mb-5 flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-indigo-300">Administración del catálogo SQL</p><h2 id="catalog-editor-title" className="mt-1 text-xl font-semibold text-white">{catalogDialog.mode === 'create' ? 'Crear partida' : 'Editar partida'}</h2></div><button type="button" onClick={() => setCatalogDialog(null)} className="text-xl text-slate-400 hover:text-white" aria-label="Cerrar">×</button></div><form onSubmit={saveCatalogPartida} className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm text-slate-300">Código<input required maxLength={50} readOnly={catalogDialog.mode === 'edit'} value={catalogDialog.partida.codigo} onChange={(event) => setCatalogDialog((state) => ({ ...state, partida: { ...state.partida, codigo: event.target.value } }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white read-only:opacity-60" /></label><label className="block text-sm text-slate-300">Unidad<input required maxLength={50} value={catalogDialog.partida.unidad} onChange={(event) => setCatalogDialog((state) => ({ ...state, partida: { ...state.partida, unidad: event.target.value } }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" /></label></div><label className="block text-sm text-slate-300">Descripción<textarea required maxLength={10000} rows={3} value={catalogDialog.partida.descripcion} onChange={(event) => setCatalogDialog((state) => ({ ...state, partida: { ...state.partida, descripcion: event.target.value } }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" /></label><label className="block text-sm text-slate-300">Precio base<input required type="number" min="0" step="0.01" value={catalogDialog.partida.precio_defecto} onChange={(event) => setCatalogDialog((state) => ({ ...state, partida: { ...state.partida, precio_defecto: event.target.value } }))} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white" /></label><div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4"><button type="button" onClick={() => setCatalogDialog(null)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={busyAction === 'catalog'} className="rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busyAction === 'catalog' ? 'Guardando…' : 'Guardar partida'}</button></div></form></GlassCard></div>}
       <section className="grid gap-6 xl:grid-cols-2">
         <GlassCard id="catalog" className="overflow-hidden">
           <div className="border-b border-white/[0.08] px-5 py-5 sm:px-6">
             <p className="text-sm font-semibold text-white">Catálogo maestro de insumos</p>
             <p className="mt-1 text-xs text-slate-500">Insumos y precios del catálogo SQL, aplicables a {project?.ciudad || 'la ciudad del proyecto'}.</p>
             <input value={masterPartidaSearch} disabled={masterPartidasLoading} onChange={(event) => setMasterPartidaSearch(event.target.value)} placeholder="Buscar insumo por código o descripción" className="mt-3 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none focus:border-indigo-400/40 disabled:opacity-50" />
+            {isAdmin && <button type="button" onClick={() => setCatalogDialog({ mode: 'create', partida: { codigo: '', unidad: '', descripcion: '', precio_defecto: '0' } })} className="mt-3 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-400">Crear partida maestra</button>}
           </div>
           {masterPartidasLoading && !masterPartidas.length ? (
             <div className="space-y-3 p-5" aria-label="Cargando partidas">
@@ -934,7 +1062,7 @@ function ProjectBudgetWorkspace({ user }) {
                         <td className="max-w-[280px] border-t border-white/[0.06] px-4 py-3 text-xs text-slate-200">{item.descripcion}</td>
                         <td className="border-t border-white/[0.06] px-3 py-3 text-xs text-slate-400">{item.unidad}</td>
                         <td className="border-t border-white/[0.06] px-4 py-3 text-right text-xs tabular-nums text-slate-200">{currency.format(item.precio_defecto)}</td>
-                        {canEdit && <td className="border-t border-white/[0.06] px-4 py-3 text-right"><button type="button" disabled={!budget} onClick={() => { setLineDialog(true); setNewCatalogItem(false); setLaborSelection({}); setLaborQuantities({}); setSelectedPartidaCode(item.codigo); setSelectedPartidaDetail(null); setSelectedVariationId(''); setPartidaSearch(item.descripcion) }} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-indigo-200 hover:bg-white/[0.05] disabled:opacity-40">Agregar</button></td>}
+                        {canEdit && <td className="border-t border-white/[0.06] px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" disabled={!budget} onClick={() => { setLineDialog(true); setNewCatalogItem(false); setLaborSelection({}); setLaborQuantities({}); setSelectedPartidaCode(item.codigo); setSelectedPartidaDetail(null); setSelectedVariationId(''); setPartidaSearch(item.descripcion) }} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-indigo-200 hover:bg-white/[0.05] disabled:opacity-40">Agregar</button>{isAdmin && <><button type="button" onClick={() => setCatalogDialog({ mode: 'edit', partida: { codigo: item.codigo, unidad: item.unidad, descripcion: item.descripcion, precio_defecto: String(item.precio_defecto ?? 0) } })} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-slate-300 hover:bg-white/[0.05]">Editar</button><button type="button" onClick={() => deleteCatalogPartida(item)} className="rounded-lg border border-rose-300/15 px-2.5 py-1.5 text-[10px] text-rose-200 hover:bg-rose-300/10">Eliminar</button></>}</div></td>}
                       </tr>
                     ))}
                   </tbody>
@@ -946,6 +1074,15 @@ function ProjectBudgetWorkspace({ user }) {
               </div>
             </>
           )}
+          {isAdmin && <div className="border-t border-white/[0.08] p-5 sm:px-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div><p className="text-sm font-semibold text-white">Precios e insumos operativos</p><p className="mt-1 text-xs text-slate-500">Archiva recursos sin borrar el historial. Los precios se ajustan por ciudad.</p></div>
+              <div className="flex flex-wrap items-end gap-2"><label className="text-[11px] text-slate-400">Ajuste para {project?.ciudad || 'la ciudad'} (%)<input type="number" min="-100" max="500" step="0.1" value={bulkPricePercent} onChange={(event) => setBulkPricePercent(event.target.value)} placeholder="Ej. 5" className="mt-1 block w-28 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white" /></label><button type="button" onClick={applyBulkPriceAdjustment} disabled={!bulkPricePercent || !project?.ciudad} className="rounded-lg border border-amber-300/20 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-300/[0.08] disabled:opacity-40">Aplicar ajuste</button></div>
+            </div>
+            <div className="mt-3 max-h-56 overflow-auto rounded-xl border border-white/[0.06]">
+              {adminOperationalItems.length ? adminOperationalItems.map((item) => <div key={item.id_insumo} className="flex items-center justify-between gap-3 border-b border-white/[0.05] px-3 py-2 last:border-0"><div className="min-w-0"><p className="truncate text-xs text-slate-200">{item.nombre_insumo}</p><p className="text-[10px] text-slate-500">{item.unidad_medida} · {item.activo ? 'activo' : 'archivado'} · {currency.format(Number(item.costo_unitario) || 0)}</p></div><button type="button" onClick={() => toggleOperationalItem(item)} className={`shrink-0 rounded-md border px-2.5 py-1.5 text-[10px] ${item.activo ? 'border-rose-300/15 text-rose-200 hover:bg-rose-300/10' : 'border-emerald-300/15 text-emerald-200 hover:bg-emerald-300/10'}`}>{item.activo ? 'Archivar' : 'Reactivar'}</button></div>) : <p className="px-3 py-4 text-xs text-slate-500">No hay insumos operativos registrados para esta ciudad.</p>}
+            </div>
+          </div>}
         </GlassCard>
 
         <GlassCard id="activities" className="overflow-hidden">
@@ -964,6 +1101,7 @@ function ProjectBudgetWorkspace({ user }) {
       {txtDialog && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTxtDialog(false) }}><motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-3xl"><GlassCard role="dialog" aria-modal="true" aria-labelledby="txt-import-title" className="max-h-[90vh] overflow-y-auto p-6"><div className="flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Cómputo BIM</p><h2 id="txt-import-title" className="mt-1 text-xl font-semibold text-white">Importar TXT de Revit o Archicad</h2><p className="mt-2 text-xs text-slate-400">Lee tablas delimitadas, encuentra partidas en SQL y utiliza sus precios oficiales. Precios del archivo son ignorados.</p></div><button type="button" onClick={() => setTxtDialog(false)} className="text-xl text-slate-500" aria-label="Cerrar">×</button></div><div className="mt-5 grid gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end"><label className="text-xs text-slate-300">Software<select value={txtSoftware} onChange={(event) => setTxtSoftware(event.target.value)} className="glass-select mt-2 w-full rounded-lg border border-white/10 px-3 py-2.5 text-sm text-white"><option value="revit">Autodesk Revit</option><option value="archicad">Graphisoft Archicad</option></select></label><label className="text-xs text-slate-300">Archivo TXT (máximo 5 MB)<input type="file" accept=".txt,text/plain" onChange={(event) => { setTxtFile(event.target.files?.[0] || null); setTxtImport(null) }} className="mt-2 block w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-500/20 file:px-3 file:py-2 file:text-indigo-100" /></label><button type="button" disabled={!txtFile || txtLoading} onClick={analyzeTxt} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-40">{txtLoading ? 'Leyendo…' : 'Leer archivo'}</button></div>{txtImport && <div className="mt-5 space-y-3"><div className="flex flex-wrap justify-between gap-2 text-xs text-slate-300"><span>{txtImport.software} · {txtImport.total_filas} filas reconocidas</span><span className="text-amber-200">{txtImport.aviso_precios}</span></div><div className="max-h-[45vh] space-y-2 overflow-y-auto">{txtImport.filas.map((row) => <div key={row.indice} className="grid gap-2 rounded-xl border border-white/[0.08] bg-black/15 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] sm:items-center"><div className="min-w-0"><p className="truncate text-xs font-medium text-white" title={row.nombre}>{row.nombre}</p><p className="mt-1 text-[10px] text-slate-500">{row.cantidad} {row.unidad || 'unidades'}{row.codigo_origen ? ` · Código: ${row.codigo_origen}` : ''}</p></div><select disabled={!row.sugerencias.length || row.agregado} value={txtChoices[row.indice] || ''} onChange={(event) => setTxtChoices((current) => ({ ...current, [row.indice]: event.target.value }))} className="glass-select min-w-0 rounded-lg border border-white/10 px-2 py-2 text-xs text-white"><option value="">Sin coincidencia en catálogo</option>{row.sugerencias.map((item) => <option key={item.codigo} value={item.codigo}>{item.codigo} · {item.descripcion} · {currency.format(item.precio_defecto)}</option>)}</select><button type="button" disabled={!txtChoices[row.indice] || row.agregado || txtAdding === row.indice} onClick={() => addImportedRow(row)} className="rounded-lg border border-emerald-300/20 px-3 py-2 text-xs text-emerald-200 disabled:opacity-40">{row.agregado ? 'Agregado' : txtAdding === row.indice ? 'Agregando…' : 'Agregar'}</button></div>)}</div><p className="text-[10px] leading-4 text-slate-500">Revisa cada coincidencia y agrega las filas necesarias. La importación no sobrescribe el catálogo ni utiliza precios del TXT.</p></div>}<div className="mt-5 flex justify-end"><button type="button" onClick={() => setTxtDialog(false)} className="rounded-lg border border-white/10 px-4 py-2 text-xs text-slate-300">Cerrar</button></div></GlassCard></motion.div></div>}
 
       {lineDialog && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLineDialog(false) }}><motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg"><GlassCard role="dialog" aria-modal="true" aria-labelledby="add-line-title" className="p-6 sm:p-7"><div className="mb-5 flex items-start justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-indigo-300">Nuevo insumo</p><h2 id="add-line-title" className="mt-1 text-xl font-semibold text-white">Agregar insumo al presupuesto</h2></div><button type="button" onClick={() => setLineDialog(false)} className="text-xl text-slate-500 hover:text-white" aria-label="Cerrar">×</button></div><form onSubmit={createLine} className="space-y-4">{!newCatalogItem ? <><label className="block text-sm text-slate-300">Buscar en el catálogo de insumos<input value={partidaSearch} onChange={(event) => { setLaborSelection({}); setLaborQuantities({}); setPartidaSearch(event.target.value); setPartidas([]); setPartidasHasMore(false); setPartidasLoading(event.target.value.trim().length >= 2); setSelectedPartidaCode(""); setSelectedPartidaDetail(null); setSelectedVariationId("") }} autoComplete="off" aria-autocomplete="list" aria-controls="catalog-suggestions" placeholder="Ej. andamio, concreto, tubería…" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label>{!selectedPartidaCode && partidaSearch.trim().length >= 2 && <div id="catalog-suggestions" className="-mt-2 overflow-hidden rounded-xl border border-indigo-300/20 bg-[#17172d] shadow-xl" role="listbox" aria-label="Sugerencias del catálogo">{partidasLoading ? <p className="px-4 py-3 text-xs text-slate-400">Buscando coincidencias en el catálogo…</p> : visiblePartidaSuggestions.length ? <><p className="border-b border-white/[0.06] px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500">Sugerencias · {partidas.length}{partidasHasMore ? "+" : ""} coincidencias</p><div className="max-h-64 overflow-y-auto">{visiblePartidaSuggestions.map((item) => <button key={item.codigo} type="button" role="option" aria-selected="false" onClick={() => { setLaborSelection({}); setLaborQuantities({}); setSelectedPartidaCode(item.codigo); setSelectedPartidaDetail(null); setSelectedVariationId("") }} className="flex w-full items-start justify-between gap-3 border-b border-white/[0.05] px-4 py-3 text-left last:border-0 hover:bg-indigo-400/10 focus:bg-indigo-400/10 focus:outline-none"><span className="min-w-0"><span className="block text-xs font-semibold text-indigo-200">{item.codigo} · {item.descripcion}</span><span className="mt-1 block text-[11px] text-slate-400">Unidad: {item.unidad}</span>{item.coincidencia_aproximada && <span className="mt-1 block text-[10px] text-amber-200">Coincidencia aproximada; revisa la descripción antes de agregar.</span>}{item.recomendaciones_mano_obra?.length > 0 && <span className="mt-1 block line-clamp-2 text-[10px] text-emerald-200">Mano de obra: {item.recomendaciones_mano_obra.slice(0, 2).map((role) => role.perfil).join(" · ")}{item.recomendaciones_mano_obra.length > 2 ? " · más" : ""}</span>}</span><span className="shrink-0 text-xs font-medium tabular-nums text-white">{currency.format(item.precio_defecto)}</span></button>)}</div>{partidasHasMore && <button type="button" onClick={loadMorePartidas} disabled={partidasLoading} className="w-full border-t border-white/[0.06] px-4 py-2.5 text-left text-xs text-indigo-300 hover:bg-white/[0.04] disabled:opacity-50">{partidasLoading ? "Cargando más coincidencias…" : `Ver más sugerencias (${partidas.length} cargadas)`}</button>}</> : <p className="px-4 py-3 text-xs text-slate-400">No hay coincidencias en el catálogo SQL. Verifica que el catálogo esté cargado en la base que usa el backend; esta búsqueda no lee archivos CSV.</p>}</div>}{!selectedPartidaCode && partidaSearch.trim().length < 2 && <p className="-mt-2 text-[11px] text-slate-500">Escribe al menos 2 letras para ver sugerencias del catálogo.</p>}{selectedPartidaCode && <button type="button" onClick={() => { setLaborSelection({}); setLaborQuantities({}); setSelectedPartidaCode(""); setSelectedPartidaDetail(null); setSelectedVariationId("") }} className="-mt-2 text-xs text-indigo-300 hover:text-indigo-200">Cambiar insumo seleccionado</button>}{selectedPartida && <div className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-4"><div><p className="text-xs font-semibold text-white">{selectedPartida.codigo} · {selectedPartida.descripcion}</p><p className="mt-1 text-xs text-slate-400">Unidad: {selectedPartida.unidad} · Precio base del catálogo: {currency.format(selectedPartida.precio_defecto)}</p>{selectedPartidaDetail?.variaciones?.length > 0 && <label className="mt-3 block text-xs text-slate-300">Opción de la partida<select value={selectedVariationId} onChange={(event) => setSelectedVariationId(event.target.value)} className="glass-select mt-2 w-full rounded-lg border border-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-indigo-400/50"><option value="">Precio base de la partida</option>{selectedPartidaDetail.variaciones.map((variation) => { const label = [variation.opcion, variation.parametro, variation.valor_probado].filter(Boolean).join(' · ') || variation.tipo; return <option key={variation.id} value={variation.id}>{label} · {variation.precio == null ? 'precio por definir' : currency.format(variation.precio)}</option> })}</select></label>}{selectedPartidaCode && !selectedPartidaDetail && <p className="mt-2 text-[11px] text-slate-500">Cargando opciones de esta partida…</p>}<p className="mt-3 rounded-lg border border-emerald-300/10 bg-emerald-300/[0.04] px-3 py-2 text-xs text-emerald-100">Precio de referencia SQL para {project?.ciudad || 'la ciudad del proyecto'}: {currency.format(selectedVariation?.precio ?? selectedPartida.precio_defecto)}. El precio se aplica desde el catálogo al guardar y no se puede modificar desde el presupuesto.</p><p className="mt-2 text-[11px] text-slate-400">Referencia laboral Colombia 2026: salario mínimo legal mensual de {currency.format(1750905)} y auxilio de transporte de {currency.format(249095)} cuando aplica. Son pisos/beneficios legales, no tarifas de oficial, ayudante ni costo total del empleador. <a className="text-indigo-300 underline" href="https://dapre.presidencia.gov.co/normativa/normativa/DECRETO%20No.%200159%20DEL%2019%20DE%20FEBRERO%20DE%202026.pdf" target="_blank" rel="noreferrer">Decreto 0159 de 2026</a> · <a className="text-indigo-300 underline" href="https://www.presidencia.gov.co/Documents/251230-Decreto-1470-MinTrabajo.pdf" target="_blank" rel="noreferrer">Decreto 1470 de 2025</a></p></div>{laborRecommendations.map((suggestion) => <div key={suggestion.title} className="border-t border-white/[0.08] pt-3"><p className="text-xs font-semibold text-indigo-200">Mano de obra sugerida · {suggestion.title}</p><div className="mt-2 space-y-2">{suggestion.roles.map((role) => { const available = suggestion.availableRoles.includes(role); const evidence = suggestion.detalles?.find((item) => item.perfil === role); return <div key={role} className="rounded-lg border border-white/[0.06] bg-black/15 p-2"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-slate-200">{role}</span><span className={`rounded-full border px-2 py-1 text-[10px] ${available ? 'border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-200' : evidence?.tipo === 'condicional' ? 'border-amber-300/20 bg-amber-300/[0.06] text-amber-200' : 'border-indigo-300/15 bg-indigo-300/[0.06] text-slate-300'}`}>{evidence?.tipo === 'condicional' ? 'condicional · verificar alcance' : available ? 'referencia 2026' : 'por cotizar'}</span>{evidence && <a href={evidence.fuente_url} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-300 underline">Fuente</a>}</div>{evidence && <p className="mt-1 text-[10px] leading-4 text-slate-400">{evidence.fundamento}</p>}</div> })}</div><p className="mt-2 text-[10px] text-slate-500">Sugerencia por palabras clave de la actividad, no constituye análisis de rendimiento ni cálculo de cuadrilla. Define cantidades y tarifas según planos, alcance y cotización.</p></div>)}{laborRecommendations.length > 0 && <div className="border-t border-white/[0.08] pt-3"><p className="text-xs font-semibold text-emerald-200">Cotizaciones referenciales de mano de obra</p>{hasAssociatedLaborPart ? <p className="mt-2 text-[11px] leading-5 text-amber-200">Esta partida ya tiene un montaje o servicio laboral asociado en el catálogo. No se agregan jornales aparte para evitar duplicar ese costo.</p> : laborCatalogLoading ? <p className="mt-2 text-[11px] text-slate-400">Revisando insumos con precio para {project?.ciudad || "esta ciudad"}…</p> : suggestedLaborItems.length ? <div className="mt-2 space-y-2">{suggestedLaborItems.map((item) => <div key={item.id_insumo} className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-black/20 p-2"><input type="checkbox" checked={laborSelection[item.id_insumo] ?? (item.cantidad_calculada !== null)} onChange={(event) => setLaborSelection((current) => ({ ...current, [item.id_insumo]: event.target.checked }))} aria-label={`Incluir ${item.nombre_insumo}`} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] text-slate-200">{item.nombre_insumo}</p><p className="text-[10px] text-slate-400">{item.unidad_medida} · referencia aplicada: {currency.format(item.cotizacion_referencial ?? item.costo_unitario)}</p>{item.cotizacion_minima != null && item.cotizacion_maxima != null && <p className="text-[10px] text-slate-500">Rango consultado: {currency.format(item.cotizacion_minima)}–{currency.format(item.cotizacion_maxima)} por {item.unidad_medida}</p>}{item.rendimiento_por_jornal && <p className="text-[10px] text-emerald-200">APU: {item.rendimiento_por_jornal} {selectedPartida?.unidad || 'unidades'} por jornal · estimado para esta cantidad: {Number((Number(lineForm.cantidad) / item.rendimiento_por_jornal).toFixed(3))} jornales</p>}{item.metodologia_cotizacion && <p className="mt-1 text-[10px] leading-4 text-slate-500">{item.metodologia_cotizacion}</p>}{item.url_cotizacion && <a className="text-[10px] text-cyan-300 underline" href={item.url_cotizacion} target="_blank" rel="noreferrer">{item.fuente_cotizacion || 'Consultar fuente'}</a>}</div><input type="number" required={laborSelection[item.id_insumo] ?? (item.cantidad_calculada !== null)} min="0.001" step="any" value={laborQuantities[item.id_insumo] ?? (item.cantidad_calculada !== null ? String(Number(item.cantidad_calculada.toFixed(3))) : '')} onChange={(event) => setLaborQuantities((current) => ({ ...current, [item.id_insumo]: event.target.value }))} disabled={!(laborSelection[item.id_insumo] ?? (item.cantidad_calculada !== null))} placeholder="jornales" aria-label={`Jornales de ${item.nombre_insumo}`} className="w-20 rounded-md border border-white/10 bg-[#11151e] px-2 py-1.5 text-xs text-white" /></div>)}</div> : <p className="mt-2 text-[11px] text-amber-200">No hay cotizaciones cargadas para {project?.ciudad || 'esta ciudad'}. Ejecuta el cargador de cotizaciones referenciales para poblar el catálogo SQL.</p>}<p className="mt-2 text-[10px] text-slate-500">Los perfiles sin rendimiento APU quedan desmarcados; selecciónalos y define sus jornales según el análisis de la actividad. Cuando existe rendimiento documentado, BIMetrics calcula los jornales a partir de la cantidad. Las tarifas siguen siendo referencias y deben validarse para cada obra.</p></div>}{!laborRecommendations.length && <p className="text-[11px] text-slate-400">No hay una regla específica para esta descripción. Revisa el alcance y define el perfil de mano de obra según la actividad.</p>}</div>}</> : <><label className="block text-sm text-slate-300">Nombre del insumo<input required maxLength={150} value={newItemForm.nombre_insumo} onChange={(event) => setNewItemForm({ ...newItemForm, nombre_insumo: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm text-slate-300">Unidad<input required maxLength={30} placeholder="Ej. kg, m³" value={newItemForm.unidad_medida} onChange={(event) => setNewItemForm({ ...newItemForm, unidad_medida: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label><label className="block text-sm text-slate-300">Precio para {project?.ciudad}<input required type="number" min="0.01" step="0.01" value={newItemForm.costo_unitario} onChange={(event) => setNewItemForm({ ...newItemForm, costo_unitario: event.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none" /></label></div></>}
+              <label className="block text-sm text-slate-300">Capítulo de obra<input maxLength={100} value={lineForm.capitulo} onChange={(event) => setLineForm({ ...lineForm, capitulo: event.target.value })} placeholder="Ej. Cimentación, estructura, acabados" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label>
               <label className="block text-sm text-slate-300">Cantidad<input required type="number" min="0.001" step="any" value={lineForm.cantidad} onChange={(event) => { setLineForm({ ...lineForm, cantidad: event.target.value }); setLaborQuantities({}) }} placeholder="Ej. 2.5" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-indigo-400/50" /></label>
               {canEdit && isAdmin && <button type="button" onClick={() => { setNewCatalogItem(!newCatalogItem); setLineForm({ ...lineForm, id_insumo: '' }) }} className="text-xs font-medium text-indigo-300 hover:text-indigo-200">{newCatalogItem ? 'Elegir del catálogo' : 'Crear insumo con precio para esta ciudad'}</button>}
                <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4"><button type="button" onClick={() => setLineDialog(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={busyAction === 'line' || (!newCatalogItem && !selectedPartidaCode)} className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busyAction === 'line' ? 'Guardando…' : 'Agregar insumo'}</button></div>

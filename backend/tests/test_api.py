@@ -242,6 +242,62 @@ def test_duplicar_usa_costos_vigentes(c, datos):
     assert copia["costo_total"] == 500000   # la copia toma el costo actual del catálogo
 
 
+def test_capitulos_filtros_historial_y_duplicacion_a_obra_nueva(c, datos):
+    proyecto = c.post("/api/proyectos", json={
+        "nombre_obra": "Obra Demo",
+        "ciudad": "Bogotá",
+        "cliente": "Cliente Demo",
+    }).get_json()
+    acero = datos["insumos"]["Acero"]
+    creado = c.post("/api/presupuestos", json={
+        "id_proyecto": proyecto["id_proyecto"],
+        "detalle": [{"id_insumo": acero["id_insumo"], "cantidad": 2, "capitulo": "Estructura"}],
+    })
+    assert creado.status_code == 201
+    assert creado.get_json()["detalle"][0]["capitulo"] == "Estructura"
+
+    nuevo = c.post(f"/api/presupuestos/{creado.get_json()['id_presupuesto']}/duplicar", json={
+        "nuevo_proyecto": {"nombre_obra": "Obra duplicada", "ciudad": "Bogotá", "cliente": "Cliente Demo"},
+    })
+    assert nuevo.status_code == 201
+    assert nuevo.get_json()["proyecto_nuevo"] is True
+    assert nuevo.get_json()["detalle"][0]["capitulo"] == "Estructura"
+    assert c.get(f"/api/proyectos/{proyecto['id_proyecto']}/presupuestos?desde=2099-01-01").get_json() == []
+    filtrado = c.get(f"/api/proyectos/{proyecto['id_proyecto']}/presupuestos?cliente=Demo&desde=2000-01-01")
+    assert filtrado.status_code == 200
+    assert len(filtrado.get_json()) == 1
+    assert c.get(f"/api/proyectos/{proyecto['id_proyecto']}/presupuestos?desde=2099-12-31&hasta=2000-01-01").status_code == 400
+
+
+def test_insumo_se_puede_archivar_y_no_agregar_mas(c, datos):
+    item = datos["insumos"]["Concreto"]
+    presupuesto = c.post("/api/presupuestos", json={"id_proyecto": datos["proyecto"]}).get_json()
+    archivado = c.patch(f"/api/insumos/{item['id_insumo']}/estado", json={"activo": False})
+    assert archivado.status_code == 200
+    assert archivado.get_json()["activo"] in (False, 0)
+    assert all(row["id_insumo"] != item["id_insumo"] for row in c.get("/api/insumos").get_json())
+    assert any(row["id_insumo"] == item["id_insumo"] for row in c.get("/api/insumos?incluir_inactivos=1").get_json())
+    agregado = c.post(f"/api/presupuestos/{presupuesto['id_presupuesto']}/detalle", json={
+        "id_insumo": item["id_insumo"], "cantidad": 1,
+    })
+    assert agregado.status_code == 400
+
+
+def test_ajuste_masivo_de_precios_restringido(c, datos):
+    concreto = datos["insumos"]["Concreto"]
+    acero = datos["insumos"]["Acero"]
+    c.post("/api/insumos", json={"nombre_insumo": "Concreto", "unidad_medida": "m3", "costo_unitario": 485000, "ciudad": "Bogotá"})
+    c.post("/api/insumos", json={"nombre_insumo": "Acero", "unidad_medida": "varilla", "costo_unitario": 46500, "ciudad": "Bogotá"})
+    response = c.put("/api/insumos/precios/ajuste-masivo", json={
+        "ciudad": "Bogotá", "porcentaje": 10, "ids_insumos": [concreto["id_insumo"]],
+    })
+    assert response.status_code == 200
+    assert response.get_json()["precios_actualizados"] == 1
+    prices = {row["id_insumo"]: row["costo_unitario"] for row in c.get("/api/insumos?ciudad=Bogot%C3%A1").get_json()}
+    assert float(prices[concreto["id_insumo"]]) == 533500
+    assert float(prices[acero["id_insumo"]]) == 46500
+
+
 def test_insumo_en_uso_no_se_borra(c, datos):
     id_insumo = datos["insumos"]["Concreto"]["id_insumo"]
     presupuesto = c.post("/api/presupuestos", json={

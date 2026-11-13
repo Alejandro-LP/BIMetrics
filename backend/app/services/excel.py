@@ -126,7 +126,17 @@ def exportar_presupuesto_excel(presupuesto: Dict[str, Any]) -> io.BytesIO:
         celda_vacia.alignment = align_centro
         fila_actual += 1
     else:
+        capitulo_anterior = None
         for idx, linea in enumerate(detalles, start=1):
+            capitulo = (linea.get("capitulo") or "").strip()
+            if capitulo and capitulo != capitulo_anterior:
+                ws.merge_cells(start_row=fila_actual, start_column=1, end_row=fila_actual, end_column=6)
+                cabecera_capitulo = ws.cell(row=fila_actual, column=1, value=f"CAPÍTULO · {capitulo}")
+                cabecera_capitulo.font = Font(name="Calibri", size=10, bold=True, color="1E3A8A")
+                cabecera_capitulo.fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
+                cabecera_capitulo.alignment = align_izq
+                fila_actual += 1
+            capitulo_anterior = capitulo or capitulo_anterior
             cantidad = float(linea.get("cantidad") or 0)
             precio_unitario = float(linea.get("costo_unitario_aplicado") or 0)
             
