@@ -6,9 +6,13 @@ BIMetrics respondió HTTP 200 y estado `ok` al consultar `/api/salud/mongodb` co
 
 ## Demostración aislada de los casos de uso
 
+<<<<<<< HEAD
 La suite actual se ejecutó desde `backend/` sobre el árbol de trabajo local: **31 pruebas aprobadas**. También se ejecutaron `npm run lint` y `npm run build` desde `frontend-bimetrics/`, ambos aprobados. La suite usa SQLite en memoria, MongoDB simulado, cuentas de prueba y datos ficticios; no certifica conectividad con Atlas ni MySQL.
 
 Las capturas y el JSON de estados HTTP se generaron para una demostración aislada anterior basada en el commit [237e3f9](https://github.com/Alejandro-LP/BIMetrics/commit/237e3f9e796bb8829519a63b11b06ef90d048591). Se conservan como evidencia visual de los flujos; para comprobar el código actual, usa los resultados de la suite y los pasos reproducibles del README principal. Ninguna imagen aislada sustituye una demostración en vivo con cuentas y bases del entorno de evaluación.
+=======
+Se ejecutaron la interfaz React y la API Flask del commit base [237e3f9](https://github.com/Alejandro-LP/BIMetrics/commit/237e3f9e796bb8829519a63b11b06ef90d048591). El navegador consumió respuestas de Flask mediante su cliente de pruebas. Se usaron SQLite en memoria, MongoDB simulado, cuentas de prueba y datos ficticios. Las capturas muestran resultados de la ejecución y no certifican conectividad con Atlas ni MySQL.
+>>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
 
 | Evidencia | Resultado |
 | --- | --- |

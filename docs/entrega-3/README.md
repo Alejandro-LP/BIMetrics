@@ -16,8 +16,11 @@ La aplicación usa React y Vite en el frontend y Flask en la API. SQLite almacen
 - **Sesión.** Las rutas privadas exigen una cookie de sesión firmada por Flask, configurada con HttpOnly, SameSite=Lax y Secure en producción. Una consulta sin sesión recibe HTTP 401. Las escrituras requieren un origen permitido.
 - **Roles.** Arquitectura e ingeniería gestionan presupuestos de proyectos accesibles. Cliente consulta proyectos compartidos. Administrador modifica el catálogo maestro y gestiona cuentas. La API valida el rol y el acceso al proyecto.
 
+<<<<<<< HEAD
 La cuenta administradora inicial se crea con `backend/scripts/crear_administrador.py`; el registro público no permite asignar ese rol. El asistente solo funciona si aún no existe una cuenta administradora y guarda la contraseña mediante hash. El flujo se describe en el [README de ejecución](../../README.md#preparar-el-primer-administrador).
 
+=======
+>>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
 ## Trazabilidad con la Entrega 1
 
 ### CU-01 · Gestión del catálogo
@@ -32,6 +35,7 @@ La aplicación exporta PDF, Word y Excel. PDF y Word incluyen el desglose del c�
 ### CU-04 · Historial y reutilización
 La aplicación consulta los presupuestos de un proyecto y permite duplicarlos. La API admite un proyecto de destino existente y accesible. La copia aplica precios vigentes del destino y el original conserva los importes aplicados. Quedan pendientes el filtro por cliente o fechas, la creación de una obra al duplicar y el ajuste masivo de precios.
 
+<<<<<<< HEAD
 Los flujos principales de los cuatro casos están cubiertos por las pruebas de API y por las evidencias enlazadas abajo. Las capacidades marcadas como pendientes son diferencias funcionales respecto al documento original, por lo que no se deben presentar como implementadas. Si la evaluación interpreta esos subrequisitos como obligatorios, la entrega aún necesita completarlos o acordar formalmente el cambio de alcance.
 
 ## Comprobación de la rúbrica de seguridad
@@ -44,6 +48,9 @@ Los flujos principales de los cuatro casos están cubiertos por las pruebas de A
 | Documentación técnica | Contrato OpenAPI 3.1 con rutas, esquemas, cookie y respuestas HTTP. | `docs/api/openapi.yaml` validado con `openapi-spec-validator` (41 rutas) |
 
 En la revisión local del 13 de noviembre de 2026: **31 pruebas aprobadas**, `npm run lint` aprobado y `npm run build` aprobado. La suite usa MongoDB simulado y SQL en memoria; no equivale a una validación en vivo de Atlas/MySQL.
+=======
+Los cuatro casos se demuestran con el alcance indicado. El docente debe confirmar si acepta los pasos pendientes como cambios de alcance.
+>>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
 
 ## Trazabilidad con la Entrega 2 · Persistencia políglota
 

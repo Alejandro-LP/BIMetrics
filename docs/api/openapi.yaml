@@ -751,6 +751,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+<<<<<<< HEAD
   /salud/sql:
     get:
       tags: [Salud]
@@ -844,6 +845,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+=======
+>>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
 components:
   schemas:
     AIU:

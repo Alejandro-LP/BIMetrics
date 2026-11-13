@@ -50,10 +50,13 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 3. En MySQL, crea el esquema que configuraste en **CATALOG_DATABASE_URL**. Restaura **data/catalogo/catalogo_precios_colombia.sql** o usa el importador que se describe en [Catálogo de insumos](#catálogo-de-insumos).
 4. Desde la raíz, ejecuta **.\.venv\Scripts\python.exe start.py**. En desarrollo HTTP, usa **SESSION_COOKIE_SECURE=0**. Para producción, configura HTTPS y **SESSION_COOKIE_SECURE=1**.
 
+<<<<<<< HEAD
 #### Preparar el primer administrador
 
 El formulario público no permite asignar el rol administrador. Para habilitar la demostración de CU-01, inicia el backend al menos una vez con MongoDB configurado y luego, desde `backend/`, ejecuta `..\.venv\Scripts\python.exe -m scripts.crear_administrador`. El asistente pide nombre, correo y contraseña sin mostrarla en pantalla; solo crea el administrador inicial cuando todavía no hay uno. Las cuentas administradoras posteriores se crean desde una sesión administradora mediante `POST /api/usuarios`.
 
+=======
+>>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
 ### Ejecución independiente con Docker Desktop
 
 En un clon de evaluación, configura **SECRET_KEY** en **.env** y usa una base operativa SQLite propia del clon. Si el clon ya contiene datos de trabajo, apunta **OPERATIONAL_DATABASE_URL** a un archivo separado. Con Docker Desktop iniciado, ejecuta **.\start_local.ps1**. Este modo inicia MongoDB local y usa un catálogo SQLite local. Registra cuentas nuevas de prueba en ese entorno. Para mostrar partidas del catálogo en esta modalidad, usa un catálogo local preparado o crea una partida de prueba por API con una cuenta administradora.
@@ -70,7 +73,11 @@ Un HTTP 200 en salud general confirma que Flask responde. MongoDB se comprueba m
 
 ## Guion de demostración para el docente
 
+<<<<<<< HEAD
 Usa cuentas y datos de prueba. Registra una cuenta de arquitectura para crear el presupuesto y una cuenta de cliente para comprobar la restricción de escritura. Prepara la primera cuenta administradora con el procedimiento anterior. El registro público admite arquitectura, ingeniería y cliente; la cuenta administradora no se puede autoasignar desde el formulario.
+=======
+Usa cuentas y datos de prueba. Registra una cuenta de arquitectura para crear el presupuesto y una cuenta de cliente para comprobar la restricción de escritura. La cuenta administradora debe estar preparada por el responsable del entorno. El registro público admite arquitectura, ingeniería y cliente.
+>>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
 
 | Caso | Acción | Resultado esperado |
 | --- | --- | --- |
@@ -81,7 +88,11 @@ Usa cuentas y datos de prueba. Registra una cuenta de arquitectura para crear el
 | CU-04 · Historial | Duplica un presupuesto y consulta el historial del proyecto. | El historial muestra el original y su copia. La copia usa precios vigentes del destino. |
 | Entrega 2 · SQL y NoSQL | Registra una actividad BIM vinculada a la obra. Consulta **GET /api/dashboard/resumen**. Después edita y elimina la actividad. | El resumen combina métricas SQL y actividad BIM. La lectura posterior a eliminar devuelve HTTP 404. |
 
+<<<<<<< HEAD
 La [trazabilidad](docs/entrega-3/README.md) y la [guía de evidencias](docs/entrega-3/evidencias/README.md) enlazan los casos funcionales con la API, las pruebas automatizadas y las capturas disponibles. Las pruebas no simulan una firma digital certificada ni reemplazan la conexión en vivo a Atlas.
+=======
+La [trazabilidad](docs/entrega-3/README.md) distingue lo demostrado de los pasos originales pendientes, como capítulos constructivos, firma digital certificada y filtros por cliente o fecha.
+>>>>>>> d74cf38826571ff6950a9289e605e2c0e815c6e4
 
 ### Cómo probar una ruta protegida
 
