@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import GlassCard from '../../components/ui/GlassCard.jsx'
 import BrandLogo from '../../components/brand/BrandLogo.jsx'
@@ -10,6 +10,7 @@ const inputClass = 'glass-control w-full rounded-xl px-4 py-3 text-sm text-white
 function LoginPage({ mode = 'login' }) {
   const isRegister = mode === 'register'
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login, register, sessionError } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -59,6 +60,7 @@ function LoginPage({ mode = 'login' }) {
               {error || sessionError}
             </p>
           )}
+          {!isRegister && searchParams.get('restablecida') === '1' && <p role="status" className="mb-5 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] px-3.5 py-3 text-sm text-emerald-100">Contraseña actualizada. Ya puedes iniciar sesión.</p>}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegister && (
@@ -95,6 +97,7 @@ function LoginPage({ mode = 'login' }) {
               {isLoading ? 'Procesando…' : isRegister ? 'Crear cuenta' : 'Entrar'}
             </button>
           </form>
+          {!isRegister && <Link to="/recuperar" className="mt-4 inline-flex text-xs font-medium text-indigo-300 transition hover:text-indigo-200">¿Olvidaste tu contraseña?</Link>}
         </GlassCard>
 
         <p className="mt-5 text-center text-sm text-slate-500">

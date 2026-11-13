@@ -70,5 +70,6 @@ class RecomendacionManoObra(db.Model):
     fundamento = db.Column(Text, nullable=False)
     fuente_url = db.Column(String(500), nullable=False)
     prioridad = db.Column(Integer, nullable=False, default=0)
+    rendimiento_por_jornal = db.Column(Numeric(12, 6))
 
     partida = relationship("Partida", back_populates="recomendaciones_mano_obra")

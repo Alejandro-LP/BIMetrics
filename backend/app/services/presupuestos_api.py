@@ -134,12 +134,12 @@ def crear_presupuesto(id_usuario, id_proyecto, lineas, aiu=None):
             text("SELECT ciudad FROM PROYECTOS WHERE id_proyecto=:proyecto"), {"proyecto": id_proyecto}
         ).scalar()
         for linea in lineas:
-            agregar_linea(connection, id_presupuesto, linea.get("id_insumo"), linea.get("cantidad"), ciudad)
+            agregar_linea(connection, id_presupuesto, linea.get("id_insumo"), linea.get("cantidad"), ciudad, linea.get("capitulo"))
         recalcular(connection, id_presupuesto)
         return presupuesto_completo(connection, id_presupuesto)
 
 
-def agregar_linea_presupuesto(id_presupuesto, id_usuario, id_insumo, cantidad, lineas_mano_obra=None):
+def agregar_linea_presupuesto(id_presupuesto, id_usuario, id_insumo, cantidad, lineas_mano_obra=None, capitulo=None):
     """Agrega el insumo y su mano de obra sugerida en una sola transacción."""
     lineas_mano_obra = lineas_mano_obra or []
     with operational_engine.begin() as connection:
@@ -148,7 +148,7 @@ def agregar_linea_presupuesto(id_presupuesto, id_usuario, id_insumo, cantidad, l
             text("SELECT ciudad FROM PROYECTOS WHERE id_proyecto=:proyecto"),
             {"proyecto": presupuesto["id_proyecto"]},
         ).scalar()
-        agregar_linea(connection, id_presupuesto, id_insumo, cantidad, ciudad)
+        agregar_linea(connection, id_presupuesto, id_insumo, cantidad, ciudad, capitulo)
         for linea in lineas_mano_obra:
             agregar_linea(
                 connection,
@@ -162,7 +162,7 @@ def agregar_linea_presupuesto(id_presupuesto, id_usuario, id_insumo, cantidad, l
 
 
 def agregar_partida_catalogo_presupuesto(
-    id_presupuesto, id_usuario, codigo, cantidad, variacion_id=None, lineas_mano_obra=None
+    id_presupuesto, id_usuario, codigo, cantidad, variacion_id=None, lineas_mano_obra=None, capitulo=None
 ):
     """Agrega una partida o variación a precio SQL vigente, sin aceptar precio del cliente."""
     if not isinstance(codigo, str) or not codigo.strip() or len(codigo.strip()) > 50:
@@ -190,7 +190,7 @@ def agregar_partida_catalogo_presupuesto(
             {"proyecto": presupuesto["id_proyecto"]},
         ).scalar() or "Bogotá"
         id_insumo = _crear_o_buscar_insumo_de_partida(connection, partida, ciudad, variacion)
-        agregar_linea(connection, id_presupuesto, id_insumo, cantidad, ciudad)
+        agregar_linea(connection, id_presupuesto, id_insumo, cantidad, ciudad, capitulo)
 
         for linea in lineas_mano_obra or []:
             agregar_linea(connection, id_presupuesto, linea["id_insumo"], linea["cantidad"], ciudad)
@@ -282,12 +282,37 @@ def actualizar_aiu_presupuesto(id_presupuesto, id_usuario, aiu):
         return presupuesto_completo(connection, id_presupuesto)
 
 
-def duplicar_presupuesto(id_presupuesto, id_usuario, id_proyecto_destino=None):
-    """Duplica líneas y aplica los precios vigentes del catálogo de destino."""
+def duplicar_presupuesto(id_presupuesto, id_usuario, id_proyecto_destino=None, nuevo_proyecto=None):
+    """Duplica un presupuesto en un proyecto existente o en una obra nueva."""
     with operational_engine.begin() as connection:
         original = _obtener_presupuesto_accesible(connection, id_presupuesto, id_usuario)
-        destino = original["id_proyecto"] if id_proyecto_destino is None else id_proyecto_destino
-        _exigir_proyecto_accesible(connection, destino, id_usuario)
+        if nuevo_proyecto is not None:
+            if id_proyecto_destino is not None or not isinstance(nuevo_proyecto, dict):
+                raise ErrorApi(400, "Envía un proyecto destino existente o los datos de una obra nueva, no ambos")
+            nombre = nuevo_proyecto.get("nombre_obra")
+            ciudad_origen = connection.execute(
+                text("SELECT ciudad FROM PROYECTOS WHERE id_proyecto=:id"),
+                {"id": original["id_proyecto"]},
+            ).scalar()
+            ciudad = nuevo_proyecto.get("ciudad") or ciudad_origen or "Bogotá"
+            cliente = nuevo_proyecto.get("cliente")
+            if not isinstance(nombre, str) or not nombre.strip() or len(nombre.strip()) > 150:
+                raise ErrorApi(400, "El nombre de la nueva obra debe tener entre 1 y 150 caracteres")
+            if not isinstance(ciudad, str) or not ciudad.strip() or len(ciudad.strip()) > 100:
+                raise ErrorApi(400, "La ciudad de la nueva obra no es válida")
+            if cliente is not None and (not isinstance(cliente, str) or len(cliente.strip()) > 150):
+                raise ErrorApi(400, "El cliente de la nueva obra no es válido")
+            creado = connection.execute(
+                text("INSERT INTO PROYECTOS (id_usuario, nombre_obra, cliente, ciudad) "
+                     "VALUES (:usuario, :nombre, :cliente, :ciudad)"),
+                {"usuario": id_usuario, "nombre": nombre.strip(),
+                 "cliente": cliente.strip() if cliente and cliente.strip() else None,
+                 "ciudad": ciudad.strip()},
+            )
+            destino = creado.lastrowid
+        else:
+            destino = original["id_proyecto"] if id_proyecto_destino is None else id_proyecto_destino
+            _exigir_proyecto_accesible(connection, destino, id_usuario)
         id_nuevo = _crear_cabecera(connection, destino, {
             "administracion": original["porcentaje_administracion"],
             "imprevistos": original["porcentaje_imprevistos"],
@@ -296,9 +321,9 @@ def duplicar_presupuesto(id_presupuesto, id_usuario, id_proyecto_destino=None):
         connection.execute(
             text(
                 "INSERT INTO DETALLE_PRESUPUESTO "
-                "(id_presupuesto, id_insumo, cantidad, costo_unitario_aplicado) "
+                "(id_presupuesto, id_insumo, cantidad, costo_unitario_aplicado, capitulo) "
                 "SELECT :nuevo, d.id_insumo, d.cantidad, "
-                "COALESCE(pc.costo_unitario, NULLIF(i.costo_unitario, 0), d.costo_unitario_aplicado) "
+                "COALESCE(pc.costo_unitario, NULLIF(i.costo_unitario, 0), d.costo_unitario_aplicado), d.capitulo "
                 "FROM DETALLE_PRESUPUESTO d JOIN INSUMOS i ON i.id_insumo=d.id_insumo "
                 "JOIN PROYECTOS y ON y.id_proyecto=:destino "
                 "LEFT JOIN PRECIOS_CIUDAD pc ON pc.id_insumo=i.id_insumo AND pc.ciudad=y.ciudad "
@@ -307,4 +332,6 @@ def duplicar_presupuesto(id_presupuesto, id_usuario, id_proyecto_destino=None):
             {"nuevo": id_nuevo, "original": id_presupuesto, "destino": destino},
         )
         recalcular(connection, id_nuevo)
-        return presupuesto_completo(connection, id_nuevo)
+        resultado = presupuesto_completo(connection, id_nuevo)
+        resultado["proyecto_nuevo"] = nuevo_proyecto is not None
+        return resultado

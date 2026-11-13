@@ -219,5 +219,7 @@ def duplicar(id):
         datos = {}
     elif not isinstance(datos, dict):
         raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
-    resultado = duplicar_presupuesto(id, _usuario_actual(), datos.get("id_proyecto"))
+    resultado = duplicar_presupuesto(
+        id, _usuario_actual(), datos.get("id_proyecto"), datos.get("nuevo_proyecto")
+    )
     return jsonify(resultado), 201

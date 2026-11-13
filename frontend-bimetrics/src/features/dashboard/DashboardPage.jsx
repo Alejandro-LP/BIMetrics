@@ -25,7 +25,6 @@ function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
-  const [search, setSearch] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -81,7 +80,7 @@ function DashboardPage() {
   ] : []
 
   return (
-    <DashboardLayout user={user} onLogout={logout} onSearch={setSearch}>
+    <DashboardLayout user={user} onLogout={logout}>
       <section id="dashboard" className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -176,7 +175,7 @@ function DashboardPage() {
         </GlassCard>
 
         <div className="mt-6">
-          <ProjectBudgetWorkspace user={user} search={search} />
+          <ProjectBudgetWorkspace user={user} />
         </div>
       </section>
     </DashboardLayout>

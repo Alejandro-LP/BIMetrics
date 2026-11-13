@@ -6,6 +6,8 @@ from ..errors import ErrorApi
 from ..services.usuarios_mongo import obtener_usuario
 from ..services.insumos import (
     actualizar_insumo,
+    ajustar_precios_masivamente,
+    actualizar_estado_insumo,
     crear_insumo,
     eliminar_insumo,
     listar_insumos,
@@ -30,13 +32,24 @@ def listar():
     """Lista insumos aplicando búsqueda y ciudad opcionales."""
     texto = request.args.get("q", "").strip()
     ciudad = request.args.get("ciudad", "").strip()
-    return jsonify(listar_insumos(texto, ciudad))
+    incluir_inactivos = request.args.get("incluir_inactivos") == "1"
+    if incluir_inactivos:
+        _exigir_administrador()
+    return jsonify(listar_insumos(texto, ciudad, incluir_inactivos))
 
 
 @bp.get("/<int:id>")
 def ver(id):
     """Devuelve un insumo por su identificador."""
     return jsonify(obtener_insumo(id))
+
+
+@bp.put("/precios/ajuste-masivo")
+def ajuste_masivo():
+    """Ajusta precios urbanos seleccionados; solo administración."""
+    _exigir_administrador()
+    datos = pedir(("ciudad", "porcentaje"))
+    return jsonify(ajustar_precios_masivamente(datos["ciudad"], datos["porcentaje"], datos.get("ids_insumos")))
 
 
 @bp.post("")
@@ -53,6 +66,13 @@ def actualizar(id):
     _exigir_administrador()
     datos = pedir(CAMPOS)
     return jsonify(actualizar_insumo(id, datos))
+
+
+@bp.patch("/<int:id>/estado")
+def actualizar_estado(id):
+    _exigir_administrador()
+    datos = pedir(("activo",))
+    return jsonify(actualizar_estado_insumo(id, datos["activo"]))
 
 
 @bp.delete("/<int:id>")

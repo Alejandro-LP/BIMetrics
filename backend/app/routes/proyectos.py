@@ -1,10 +1,14 @@
 """Endpoints HTTP para proyectos, historial y colaboradores."""
 
-from flask import Blueprint, jsonify, session
+from datetime import date
+
+from flask import Blueprint, jsonify, request, session
 
 from ..errors import ErrorApi
 from ..services.proyectos import (
     crear_proyecto,
+    crear_codigo_invitacion,
+    aceptar_codigo_invitacion,
     eliminar_proyecto,
     invitar_colaborador,
     listar_proyectos,
@@ -39,7 +43,22 @@ def crear():
 @bp.get("/<int:id>/presupuestos")
 def historial(id):
     """Lista el historial presupuestario de un proyecto accesible."""
-    return jsonify(obtener_historial_proyecto(id, _usuario_actual()))
+    cliente = request.args.get("cliente", "").strip()
+    if len(cliente) > 150:
+        raise ErrorApi(400, "El filtro de cliente no puede superar 150 caracteres")
+    fechas = {}
+    for parametro in ("desde", "hasta"):
+        valor = request.args.get(parametro)
+        if valor:
+            try:
+                fechas[parametro] = date.fromisoformat(valor).isoformat()
+            except ValueError as error:
+                raise ErrorApi(400, f"{parametro} debe tener formato AAAA-MM-DD") from error
+        else:
+            fechas[parametro] = None
+    if fechas["desde"] and fechas["hasta"] and fechas["desde"] > fechas["hasta"]:
+        raise ErrorApi(400, "desde no puede ser posterior a hasta")
+    return jsonify(obtener_historial_proyecto(id, _usuario_actual(), cliente, fechas["desde"], fechas["hasta"]))
 
 
 @bp.post("/<int:id>/colaboradores")
@@ -48,6 +67,21 @@ def invitar(id):
     datos = pedir(("email",))
     invitar_colaborador(id, _usuario_actual(), datos["email"])
     return jsonify(ok=True, mensaje="Colaborador agregado al proyecto"), 201
+
+
+@bp.post("/<int:id>/invitaciones")
+def crear_invitacion(id):
+    """Crea un código de un solo uso para arquitecto, ingeniero o cliente."""
+    datos = pedir(("rol",))
+    return jsonify(crear_codigo_invitacion(id, _usuario_actual(), datos["rol"])), 201
+
+
+@bp.post("/invitaciones/aceptar")
+def aceptar_invitacion():
+    """Canjea un código cuyo rol debe coincidir con el de la cuenta actual."""
+    datos = pedir(("codigo",))
+    proyecto = aceptar_codigo_invitacion(_usuario_actual(), datos["codigo"])
+    return jsonify(ok=True, mensaje="Te uniste al proyecto.", proyecto=proyecto), 200
 
 
 @bp.delete("/<int:id>")

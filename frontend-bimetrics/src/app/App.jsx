@@ -8,6 +8,7 @@ const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage.jsx
 const LandingPage = lazy(() => import('../features/public/LandingPage.jsx'))
 const LegalPage = lazy(() => import('../features/public/LegalPage.jsx'))
 const LoginPage = lazy(() => import('../features/auth/LoginPage.jsx'))
+const PasswordResetPage = lazy(() => import('../features/auth/PasswordResetPage.jsx'))
 const ProfilePage = lazy(() => import('../features/profile/ProfilePage.jsx'))
 const ContactPage = lazy(() => import('../features/public/ContactPage.jsx'))
 
@@ -38,6 +39,8 @@ function AppRoutes() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<GuestRoute><LoginPage mode="login" /></GuestRoute>} />
         <Route path="/registro" element={<GuestRoute><LoginPage mode="register" /></GuestRoute>} />
+        <Route path="/recuperar" element={<PasswordResetPage />} />
+        <Route path="/restablecer" element={<PasswordResetPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/contacto" element={<ContactPage />} />

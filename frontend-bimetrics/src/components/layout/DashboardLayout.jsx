@@ -9,7 +9,7 @@ const navigation = [
   { label: 'Actividad BIM', href: '#activities' },
 ]
 
-function DashboardLayout({ children, user, onLogout, onSearch }) {
+function DashboardLayout({ children, user, onLogout }) {
   const [activeItem, setActiveItem] = useState('Resumen general')
   const displayName = user?.nombre_completo || 'BIMetrics'
 
@@ -64,18 +64,14 @@ function DashboardLayout({ children, user, onLogout, onSearch }) {
       </aside>
 
       <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col lg:h-screen">
-        <header className="glass-surface mx-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3 sm:mx-4 sm:px-5 lg:mt-4">
-          <label className="glass-control dashboard-search min-w-[min(100%,18rem)] flex-1 rounded-xl px-4 py-2.5 text-slate-300 transition-colors focus-within:border-indigo-300/50 focus-within:ring-2 focus-within:ring-indigo-400/10">
-            <span className="sr-only">Buscar proyectos e insumos</span>
-            <input
-              type="search"
-              placeholder="Buscar proyectos e insumos"
-              aria-label="Buscar proyectos e insumos"
-              onChange={(event) => onSearch?.(event.target.value)}
-              className="w-full bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
-            />
-          </label>
-          <p className="hidden max-w-52 truncate text-sm text-slate-400 sm:block" title={displayName}>
+        <header className="glass-surface mx-3 flex shrink-0 items-center justify-between gap-3 rounded-2xl px-4 py-3 sm:mx-4 sm:px-5 lg:mt-4">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+            <p className="text-xs font-medium text-slate-300">
+              Espacio de trabajo · <span className="capitalize text-slate-400">{user?.rol || 'Sesión'}</span>
+            </p>
+          </div>
+          <p className="max-w-52 truncate text-sm font-medium text-slate-300" title={displayName}>
             {displayName}
           </p>
         </header>

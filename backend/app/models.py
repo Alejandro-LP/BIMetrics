@@ -1,6 +1,7 @@
 """Esquema de la base de datos (según el diagrama ER)."""
 from sqlalchemy import (
     Boolean,
+    DateTime,
     Column,
     Date,
     ForeignKey,
@@ -25,6 +26,16 @@ Table("PROYECTO_COLABORADORES", meta,
       Column("id_proyecto", Integer, ForeignKey("PROYECTOS.id_proyecto", ondelete="CASCADE"), primary_key=True),
       Column("id_usuario", Integer, primary_key=True),
       Column("invitado_por", Integer, nullable=False))
+Table("PROYECTO_INVITACIONES", meta,
+      Column("id_invitacion", Integer, primary_key=True, autoincrement=True),
+      Column("id_proyecto", Integer, ForeignKey("PROYECTOS.id_proyecto", ondelete="CASCADE"), nullable=False, index=True),
+      Column("codigo_hash", String(64), nullable=False, unique=True),
+      Column("rol", String(20), nullable=False),
+      Column("creado_por", Integer, nullable=False),
+      Column("creado_en", DateTime, nullable=False),
+      Column("expira_en", DateTime, nullable=False),
+      Column("aceptado_por", Integer),
+      Column("aceptado_en", DateTime))
 Table("PRESUPUESTOS", meta,
       Column("id_presupuesto", Integer, primary_key=True, autoincrement=True),
       Column("id_proyecto", Integer, ForeignKey("PROYECTOS.id_proyecto"), nullable=False),
@@ -62,12 +73,14 @@ Table("DETALLE_PRESUPUESTO", meta,
       Column("id_presupuesto", Integer, ForeignKey("PRESUPUESTOS.id_presupuesto"), nullable=False),
       Column("id_insumo", Integer, ForeignKey("INSUMOS.id_insumo"), nullable=False),
       Column("cantidad", Numeric(14, 3), nullable=False),
-      Column("costo_unitario_aplicado", Numeric(14, 2), nullable=False))
+      Column("costo_unitario_aplicado", Numeric(14, 2), nullable=False),
+      Column("capitulo", String(100)))
 
 # Orden de creación (de padres a hijos); para borrar se usa el orden inverso
 TABLAS = (
     "PROYECTOS",
     "PROYECTO_COLABORADORES",
+    "PROYECTO_INVITACIONES",
     "INSUMOS",
     "PRECIOS_CIUDAD",
     "COTIZACIONES_MANO_OBRA",

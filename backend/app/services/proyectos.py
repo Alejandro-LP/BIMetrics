@@ -1,11 +1,15 @@
 """Casos de uso y persistencia de proyectos y colaboradores."""
 
+import hashlib
+import secrets
+from datetime import datetime, timedelta
+
 from sqlalchemy import text
 
 from ..database import operational_engine
 from ..errors import ErrorApi
 from ..utils import filas, obtener
-from .usuarios_mongo import obtener_usuario_por_email, obtener_usuarios
+from .usuarios_mongo import obtener_usuario, obtener_usuario_por_email, obtener_usuarios
 
 
 def listar_proyectos(id_usuario):
@@ -52,8 +56,8 @@ def crear_proyecto(id_usuario, datos):
         return obtener(connection, "PROYECTOS", "id_proyecto", resultado.lastrowid)
 
 
-def obtener_historial_proyecto(id_proyecto, id_usuario):
-    """Devuelve presupuestos del proyecto si el usuario tiene acceso."""
+def obtener_historial_proyecto(id_proyecto, id_usuario, cliente="", desde=None, hasta=None):
+    """Devuelve historial accesible con filtros opcionales de cliente y fecha."""
     with operational_engine.connect() as connection:
         acceso = connection.execute(
             text("SELECT 1 FROM PROYECTOS p WHERE p.id_proyecto=:proyecto AND "
@@ -64,9 +68,14 @@ def obtener_historial_proyecto(id_proyecto, id_usuario):
         if not acceso:
             raise ErrorApi(404, "El proyecto no existe")
         resultado = connection.execute(
-            text("SELECT * FROM PRESUPUESTOS WHERE id_proyecto=:proyecto "
-                 "ORDER BY fecha_calculo DESC, id_presupuesto DESC"),
-            {"proyecto": id_proyecto},
+            text("SELECT b.*, p.nombre_obra, p.cliente, p.ciudad FROM PRESUPUESTOS b "
+                 "JOIN PROYECTOS p ON p.id_proyecto=b.id_proyecto "
+                 "WHERE b.id_proyecto=:proyecto "
+                 "AND (:cliente='' OR LOWER(COALESCE(p.cliente,'')) LIKE :cliente) "
+                 "AND (:desde IS NULL OR b.fecha_calculo>=:desde) "
+                 "AND (:hasta IS NULL OR b.fecha_calculo<=:hasta) "
+                 "ORDER BY b.fecha_calculo DESC, b.id_presupuesto DESC"),
+            {"proyecto": id_proyecto, "cliente": f"%{cliente.strip().lower()}%", "desde": desde, "hasta": hasta},
         )
         return filas(resultado)
 
@@ -101,6 +110,92 @@ def invitar_colaborador(id_proyecto, id_propietario, email):
                      "VALUES (:proyecto, :usuario, :propietario)"),
                 {"proyecto": id_proyecto, "usuario": usuario["id_usuario"], "propietario": id_propietario},
             )
+
+
+def crear_codigo_invitacion(id_proyecto, id_propietario, rol):
+    """Genera un código aleatorio, ligado a rol y proyecto, válido por siete días."""
+    if rol not in ("arquitecto", "ingeniero", "cliente"):
+        raise ErrorApi(400, "El código debe asignarse a un arquitecto, ingeniero o cliente")
+    codigo = secrets.token_urlsafe(24)
+    ahora = datetime.utcnow()
+    expira = ahora + timedelta(days=7)
+    with operational_engine.begin() as connection:
+        proyecto = connection.execute(
+            text("SELECT id_proyecto FROM PROYECTOS WHERE id_proyecto=:proyecto AND id_usuario=:usuario"),
+            {"proyecto": id_proyecto, "usuario": id_propietario},
+        ).first()
+        if not proyecto:
+            raise ErrorApi(404, "El proyecto no existe o no eres su creador")
+        connection.execute(
+            text(
+                "INSERT INTO PROYECTO_INVITACIONES "
+                "(id_proyecto, codigo_hash, rol, creado_por, creado_en, expira_en) "
+                "VALUES (:proyecto, :hash, :rol, :usuario, :creado, :expira)"
+            ),
+            {
+                "proyecto": id_proyecto,
+                "hash": hashlib.sha256(codigo.encode("utf-8")).hexdigest(),
+                "rol": rol,
+                "usuario": id_propietario,
+                "creado": ahora,
+                "expira": expira,
+            },
+        )
+    return {"codigo": codigo, "rol": rol, "expira_en": expira.isoformat() + "Z"}
+
+
+def aceptar_codigo_invitacion(id_usuario, codigo):
+    """Consume un código de un solo uso y agrega al usuario al proyecto asociado."""
+    if not isinstance(codigo, str) or not 20 <= len(codigo.strip()) <= 100:
+        raise ErrorApi(400, "El código no es válido o ya expiró")
+    codigo_hash = hashlib.sha256(codigo.strip().encode("utf-8")).hexdigest()
+    ahora = datetime.utcnow()
+    with operational_engine.begin() as connection:
+        invitacion = connection.execute(
+            text(
+                "SELECT id_invitacion, id_proyecto, rol, expira_en, aceptado_en "
+                "FROM PROYECTO_INVITACIONES WHERE codigo_hash=:hash"
+            ),
+            {"hash": codigo_hash},
+        ).mappings().first()
+        if not invitacion or invitacion["aceptado_en"] is not None or invitacion["expira_en"] <= ahora:
+            raise ErrorApi(400, "El código no es válido o ya expiró")
+        perfil = obtener_usuario(id_usuario)
+        if not perfil or perfil["rol"] != invitacion["rol"]:
+            raise ErrorApi(403, "Este código fue creado para otro tipo de cuenta")
+        propietario = connection.execute(
+            text("SELECT id_usuario FROM PROYECTOS WHERE id_proyecto=:proyecto"),
+            {"proyecto": invitacion["id_proyecto"]},
+        ).scalar()
+        if id_usuario == propietario:
+            raise ErrorApi(400, "Ya eres propietario de este proyecto")
+        existente = connection.execute(
+            text("SELECT 1 FROM PROYECTO_COLABORADORES WHERE id_proyecto=:proyecto AND id_usuario=:usuario"),
+            {"proyecto": invitacion["id_proyecto"], "usuario": id_usuario},
+        ).first()
+        if existente:
+            raise ErrorApi(409, "Ya tienes acceso a este proyecto")
+        reserva = connection.execute(
+            text(
+                "UPDATE PROYECTO_INVITACIONES SET aceptado_por=:usuario, aceptado_en=:ahora "
+                "WHERE id_invitacion=:id AND aceptado_en IS NULL AND expira_en>:ahora"
+            ),
+            {"usuario": id_usuario, "ahora": ahora, "id": invitacion["id_invitacion"]},
+        )
+        if reserva.rowcount != 1:
+            raise ErrorApi(400, "El código no es válido o ya expiró")
+        connection.execute(
+            text(
+                "INSERT INTO PROYECTO_COLABORADORES (id_proyecto, id_usuario, invitado_por) "
+                "SELECT id_proyecto, :usuario, creado_por FROM PROYECTO_INVITACIONES WHERE id_invitacion=:id"
+            ),
+            {"usuario": id_usuario, "id": invitacion["id_invitacion"]},
+        )
+        proyecto = connection.execute(
+            text("SELECT id_proyecto, nombre_obra FROM PROYECTOS WHERE id_proyecto=:proyecto"),
+            {"proyecto": invitacion["id_proyecto"]},
+        ).mappings().first()
+    return dict(proyecto)
 
 
 def eliminar_proyecto(id_proyecto, id_propietario):

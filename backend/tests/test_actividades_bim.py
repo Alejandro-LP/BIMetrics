@@ -25,6 +25,7 @@ def app_cliente(mongo_store):
         "email": "andres@bimetrics.local",
         "rol": "arquitecto",
         "password_hash": "hash-no-usado-en-este-test",
+        "version_sesion": 1,
         "fecha_creacion": datetime.now(timezone.utc),
     }
     mongo_store["users"]["usuarios"].insert_one(usuario)
@@ -33,6 +34,7 @@ def app_cliente(mongo_store):
     cliente.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
     with cliente.session_transaction() as sesion:
         sesion["id_usuario"] = 101
+        sesion["version_sesion"] = 1
     return cliente
 
 

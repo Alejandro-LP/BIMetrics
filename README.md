@@ -4,6 +4,9 @@ Aplicación web para gestionar proyectos y presupuestos de obra, consultar un ca
 
 ## Contenido
 
+- [Paquete de entrega académica](#paquete-de-entrega-académica)
+- [Ruta de evaluación desde un clon limpio](#ruta-de-evaluación-desde-un-clon-limpio)
+- [Guion de demostración para el docente](#guion-de-demostración-para-el-docente)
 - [Características](#características)
 - [Arquitectura](#arquitectura)
 - [Requisitos](#requisitos)
@@ -14,6 +17,101 @@ Aplicación web para gestionar proyectos y presupuestos de obra, consultar un ca
 - [Pruebas y calidad](#pruebas-y-calidad)
 - [Solución de problemas](#solución-de-problemas)
 - [Documentación](#documentación)
+
+## Paquete de entrega académica
+
+- [Entrega 3 · SRS de seguridad, autenticación y cierre (PDF)](docs/entrega-3/entrega-3-seguridad-y-api.pdf)
+- [Entrega 2 · Persistencia políglota y verificación (PDF)](docs/entrega-3/entrega-2-persistencia-poliglota.pdf)
+- [Trazabilidad de las entregas 1 y 2](docs/entrega-3/README.md)
+- [Diagrama UML](docs/entrega-3/casos-de-uso.svg) y [contrato OpenAPI](docs/api/openapi.yaml)
+- [Capturas, resultados y evidencia de conexión real a Atlas](docs/entrega-3/evidencias/README.md)
+
+## Ruta de evaluación desde un clon limpio
+
+1. Clona la rama de entrega y entra en la carpeta.
+2. Instala Python y Node en las versiones de [Requisitos](#requisitos). Crea el entorno e instala las dependencias.
+3. Escoge entre Atlas con MySQL y el modo de demostración con Docker Desktop.
+4. Inicia la app. Abre **http://localhost:5173** y mantén abierta la terminal. Flask atiende en **http://127.0.0.1:5000**.
+5. Comprueba los servicios. Si MongoDB devuelve HTTP 503, el registro y el inicio de sesión pueden fallar aunque la interfaz esté disponible.
+
+~~~powershell
+git clone --branch codex/entrega-3-seguridad-evidencias https://github.com/Alejandro-LP/BIMetrics.git
+Set-Location BIMetrics
+uv venv --python 3.14.2 .venv
+uv pip install --python .venv\Scripts\python.exe -r backend\requirements.txt
+npm --prefix frontend-bimetrics ci
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+~~~
+
+### Ejecución con Atlas y MySQL
+
+1. En Atlas, verifica que el clúster esté activo. Autoriza la IP de salida del equipo en **Database & Network Access** y configura un usuario de base de datos con acceso a los dominios de usuarios y actividad de BIMetrics.
+2. En el archivo privado **.env**, define **SECRET_KEY**, **MONGO_URI** y las bases de usuarios y actividad BIM. Usa la cadena que Atlas genera para PyMongo.
+3. En MySQL, crea el esquema que configuraste en **CATALOG_DATABASE_URL**. Restaura **data/catalogo/catalogo_precios_colombia.sql** o usa el importador que se describe en [Catálogo de insumos](#catálogo-de-insumos).
+4. Desde la raíz, ejecuta **.\.venv\Scripts\python.exe start.py**. En desarrollo HTTP, usa **SESSION_COOKIE_SECURE=0**. Para producción, configura HTTPS y **SESSION_COOKIE_SECURE=1**.
+
+#### Preparar el primer administrador
+
+El formulario público no permite asignar el rol administrador. Para habilitar la demostración de CU-01, inicia el backend al menos una vez con MongoDB configurado y luego, desde `backend/`, ejecuta `..\.venv\Scripts\python.exe -m scripts.crear_administrador`. El asistente pide nombre, correo y contraseña sin mostrarla en pantalla; solo crea el administrador inicial cuando todavía no hay uno. Las cuentas administradoras posteriores se crean desde una sesión administradora mediante `POST /api/usuarios`.
+
+### Ejecución independiente con Docker Desktop
+
+En un clon de evaluación, configura **SECRET_KEY** en **.env** y usa una base operativa SQLite propia del clon. Si el clon ya contiene datos de trabajo, apunta **OPERATIONAL_DATABASE_URL** a un archivo separado. Con Docker Desktop iniciado, ejecuta **.\start_local.ps1**. Este modo inicia MongoDB local y usa un catálogo SQLite local. Registra cuentas nuevas de prueba en ese entorno. Para mostrar partidas del catálogo en esta modalidad, usa un catálogo local preparado o crea una partida de prueba por API con una cuenta administradora.
+
+### Comprobaciones antes de la exposición
+
+~~~powershell
+$api = 'http://127.0.0.1:5000/api'
+Invoke-RestMethod "$api/salud"
+Invoke-RestMethod "$api/salud/mongodb"
+~~~
+
+Un HTTP 200 en salud general confirma que Flask responde. MongoDB se comprueba mediante ping. Para revisar SQL, inicia sesión y consulta **GET /api/partidas?limit=1** con la cookie. Si la lista está vacía, carga el catálogo o prepara una partida de prueba antes de la demostración.
+
+## Guion de demostración para el docente
+
+Usa cuentas y datos de prueba. Registra una cuenta de arquitectura para crear el presupuesto y una cuenta de cliente para comprobar la restricción de escritura. Prepara la primera cuenta administradora con el procedimiento anterior. El registro público admite arquitectura, ingeniería y cliente; la cuenta administradora no se puede autoasignar desde el formulario.
+
+| Caso | Acción | Resultado esperado |
+| --- | --- | --- |
+| Seguridad | Consulta proyectos sin sesión. Inicia sesión como cliente e intenta modificar el catálogo por API. | HTTP 401 sin sesión y HTTP 403 para la escritura del cliente. |
+| CU-01 · Catálogo | Como administrador, crea, consulta y edita una partida en **/api/partidas**. Elimina una partida desechable. | HTTP 201, 200, 200 y 204. |
+| CU-02 · Cálculo | Agrega 20 m de una partida de $45.000 COP/m. Aplica 10 % de administración, 3 % de imprevistos y 7 % de utilidad. | Costo directo de $900.000, AIU de $180.000 y total de $1.080.000 COP. Valores ilustrativos. |
+| CU-03 · Documentos | Descarga PDF, Word y Excel desde el presupuesto y abre los archivos. | Los tres formatos se descargan y muestran el desglose. |
+| CU-04 · Historial | Duplica un presupuesto y consulta el historial del proyecto. | El historial muestra el original y su copia. La copia usa precios vigentes del destino. |
+| Entrega 2 · SQL y NoSQL | Registra una actividad BIM vinculada a la obra. Consulta **GET /api/dashboard/resumen**. Después edita y elimina la actividad. | El resumen combina métricas SQL y actividad BIM. La lectura posterior a eliminar devuelve HTTP 404. |
+
+La [trazabilidad](docs/entrega-3/README.md) y la [guía de evidencias](docs/entrega-3/evidencias/README.md) enlazan los casos funcionales con la API, las pruebas automatizadas y las capturas disponibles. Las pruebas no simulan una firma digital certificada ni reemplazan la conexión en vivo a Atlas.
+
+### Cómo probar una ruta protegida
+
+En PowerShell 7, conserva la cookie en la misma sesión. El encabezado **Origin** de las escrituras debe coincidir con el frontend configurado.
+
+~~~powershell
+$api = 'http://127.0.0.1:5000/api'
+$origin = @{ Origin = 'http://localhost:5173' }
+$email = Read-Host 'Correo de la cuenta de prueba'
+$clave = Read-Host 'Contraseña de la cuenta de prueba' -MaskInput
+$body = @{ email = $email; password = $clave } | ConvertTo-Json -Compress
+Invoke-RestMethod "$api/auth/login" -Method Post -Headers $origin -ContentType 'application/json' -Body $body -SessionVariable sesion
+Remove-Variable clave,body
+Invoke-RestMethod "$api/auth/sesion" -WebSession $sesion
+Invoke-RestMethod "$api/proyectos" -WebSession $sesion
+Invoke-RestMethod "$api/partidas?limit=1" -WebSession $sesion
+Invoke-RestMethod "$api/dashboard/resumen" -WebSession $sesion
+~~~
+
+- **401** indica sesión ausente, vencida o credenciales rechazadas.
+- **403** indica permiso insuficiente u origen de escritura no autorizado.
+- **404** indica recurso inexistente o fuera del alcance de la cuenta.
+- **503** indica una dependencia no disponible.
+- Para revisar los campos y respuestas de cada operación, consulta [OpenAPI](docs/api/openapi.yaml).
+
+### Cómo leer las evidencias
+
+- **Atlas en vivo.** La [respuesta de salud](docs/entrega-3/evidencias/atlas-en-vivo.json) confirma HTTP 200 del clúster real. El inicio de sesión con credenciales ficticias devolvió HTTP 401, el resultado esperado.
+- **Pruebas reproducibles.** Pasaron **31 pruebas** del backend en el cierre. Se ejecutaron con SQLite en memoria y MongoDB simulado para aislar las reglas, los permisos y las exportaciones.
+- **Interfaz y API.** El [índice de evidencias](docs/entrega-3/evidencias/README.md) identifica el entorno de cada captura y respuesta JSON.
 
 ## Características
 
@@ -100,6 +198,10 @@ Variables principales:
 | `MONGO_DNS_SERVERS` | Resolutores DNS opcionales separados por comas para conexiones `mongodb+srv`. |
 | `CORS_ORIGIN` | Orígenes permitidos para el frontend. |
 | `SESSION_COOKIE_SECURE` | Requiere cookie segura en HTTPS cuando vale `1`. |
+| `APP_BASE_URL` | URL pública del frontend para construir el enlace de recuperación. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | Servidor de correo para entregar enlaces de restablecimiento. |
+| `SMTP_USE_TLS` | Habilita STARTTLS, normalmente en el puerto 587. |
+| `PASSWORD_RESET_DEBUG` | En desarrollo local, muestra el enlace en la interfaz para probar sin SMTP. Nunca usar en producción. |
 
 Para MySQL también puedes configurar `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` y `MYSQL_DATABASE` en lugar de `CATALOG_DATABASE_URL`.
 
@@ -139,7 +241,7 @@ El backend requiere que MongoDB esté configurado. El catálogo maestro requiere
 Si Atlas no es accesible desde tu red, el script `start_local.ps1` inicia o reutiliza un contenedor MongoDB local. Requiere Docker Desktop iniciado y el entorno `.venv` instalado:
 
 ```powershell
-\.\start_local.ps1
+.\start_local.ps1
 ```
 
 Este modo usa MongoDB en `127.0.0.1:27017` y un catálogo SQLite local en `data/catalogo-local.db`. No modifica la URI de Atlas guardada en `.env`. Los datos creados localmente no se sincronizan con Atlas ni con MySQL.
@@ -159,7 +261,13 @@ MongoDB se utiliza para actividad BIM porque sus metadatos pueden cambiar según
 
 ### Catálogo de insumos
 
-El catálogo fuente está en `data/catalogo/catalogo_precios_colombia.csv`; el volcado SQL correspondiente está en `data/catalogo/catalogo_precios_colombia.sql`. Las partidas y variaciones permanecen en SQL, no en MongoDB.
+La aplicación lee las partidas y variaciones desde las tablas `partidas` y `variaciones_opciones` de MySQL, usando `CATALOG_DATABASE_URL`; el frontend no consulta archivos CSV. `data/catalogo/catalogo_precios_colombia.sql` es el volcado para restaurar el catálogo en SQL. El CSV se conserva como respaldo auxiliar para regenerar ese volcado si se necesita.
+
+El buscador consulta primero coincidencias directas en SQL y, si no encuentra ninguna, compara palabras normalizadas de las partidas SQL para tolerar errores tipográficos pequeños. Las sugerencias aproximadas se identifican para que el usuario confirme la descripción antes de agregarlas.
+
+Para revisar la conexión y cuántos registros contiene la base SQL que consulta la aplicación, abre `http://127.0.0.1:5000/api/salud/sql`. Debe responder `estado: ok` y mostrar conteos mayores que cero.
+
+Para restaurar el catálogo desde el respaldo SQL con MySQL Workbench, abre la conexión y el esquema indicado por `CATALOG_DATABASE_URL`, entra a **Server → Data Import → Import from Self-Contained File**, selecciona `data/catalogo/catalogo_precios_colombia.sql`, confirma ese esquema como destino e inicia la importación. Reinicia Flask y vuelve a comprobar `/api/salud/sql`.
 
 Validar el CSV sin conectarse a MySQL:
 
@@ -188,7 +296,15 @@ Cargar o actualizar las cotizaciones referenciales desde `backend/`:
 ..\.venv\Scripts\python.exe -m scripts.cargar_cotizaciones_mano_obra
 ```
 
-La carga es idempotente y escribe los perfiles sugeridos en `INSUMOS`, el precio aplicado por ciudad en `PRECIOS_CIUDAD` y el rango auditable en `COTIZACIONES_MANO_OBRA`. La interfaz muestra el rango, el valor usado, el método y el enlace a la fuente. Las sugerencias marcadas como condicionales aparecen desmarcadas para que el usuario confirme que el alcance requiere ese perfil. Las cantidades iniciales son un jornal por perfil y deben reemplazarse por cantidades y rendimientos del APU real. Entre las referencias consultadas están [tarifas de mano de obra por oficio y ciudad de Obra Maestra](https://obramaestra.com/co/guias/cuanto-cobrar-mano-de-obra-construccion-colombia) y [APU público de instalación metálica de Soluciones Excel](https://www.solucionesexcel.com/apu/2741-instalacion-nave-puerta-lamina/).
+La carga es idempotente y escribe los perfiles sugeridos en `INSUMOS`, el precio aplicado por ciudad en `PRECIOS_CIUDAD` y el rango auditable en `COTIZACIONES_MANO_OBRA`. La interfaz muestra el rango, el valor usado, el método y el enlace a la fuente. Los perfiles sin rendimiento documentado quedan desmarcados y requieren que el usuario indique jornales; no se asume un jornal por partida. Para `ICN015`, el APU de tubería de refrigeración registra un técnico por 20 m, por lo que el presupuesto calcula `cantidad / 20` jornales. Los perfiles de montaje asociados a una partida ya valorizada de montaje no se agregan otra vez. Las sugerencias siguen siendo referencias y deben validarse según el alcance real. Fuentes consultadas: [tarifas de mano de obra por oficio y ciudad de Obra Maestra](https://obramaestra.com/co/guias/cuanto-cobrar-mano-de-obra-construccion-colombia), [APU de instalación metálica](https://www.solucionesexcel.com/apu/2741-instalacion-nave-puerta-lamina/) y [APU de tubería para refrigeración](https://solucionesexcel.com/apu/3645-ext-tuberia-cobre-1-2-3-8-rubatex/).
+
+Las recomendaciones por código y los coeficientes APU se cargan al catálogo MySQL desde `backend/`:
+
+```powershell
+..\.venv\Scripts\python.exe -m scripts.cargar_recomendaciones_mano_obra
+```
+
+Al iniciar Flask, la aplicación agrega la columna nullable `rendimiento_por_jornal` si una instalación previa todavía no la tiene. El cargador de recomendaciones actualiza `ICN015` con su fuente y rendimiento de 20 m/jornal.
 
 ### Importación de cómputos TXT desde Revit y Archicad
 
@@ -202,7 +318,7 @@ Hay scripts de migración para instalaciones anteriores. Revisa cuidadosamente s
 
 ## API principal
 
-Las rutas de negocio requieren sesión, excepto las rutas de salud y registro/login. Todas las solicitudes que cambian datos deben enviar un encabezado `Origin` permitido por `CORS_ORIGIN`; las solicitudes sin ese encabezado se rechazan para reducir el riesgo de CSRF.
+Las rutas de negocio requieren sesión, excepto las rutas de salud, registro/login y solicitud/confirmación de restablecimiento. Todas las solicitudes que cambian datos deben enviar un encabezado `Origin` permitido por `CORS_ORIGIN`; las solicitudes sin ese encabezado se rechazan para reducir el riesgo de CSRF.
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -210,12 +326,16 @@ Las rutas de negocio requieren sesión, excepto las rutas de salud y registro/lo
 | `GET` | `/api/salud/mongodb` | Comprueba MongoDB mediante `ping`. |
 | `POST` | `/api/auth/registro` | Registra una cuenta. |
 | `POST` | `/api/auth/login` | Inicia sesión. |
+| `POST` | `/api/auth/solicitar-restablecimiento` | Solicita un enlace de recuperación sin revelar si el correo existe. |
+| `POST` | `/api/auth/restablecer-password` | Consume el token de un solo uso, válido durante 30 minutos. |
 | `GET` | `/api/auth/sesion` | Consulta la sesión actual. |
 | `POST` | `/api/auth/logout` | Cierra sesión. |
 | `GET` | `/api/dashboard/resumen` | Combina métricas SQL con perfil y actividad MongoDB. |
 | `POST` | `/api/presupuestos/{id}/partidas` | Agrega una partida del catálogo SQL con el precio asignado por el servidor. |
 | `POST` | `/api/presupuestos/{id}/importar-txt/analizar` | Analiza un TXT tabulado de Revit o Archicad y devuelve sugerencias SQL sin modificar el presupuesto. |
 | `POST` | `/api/actividades-bim` | Registra una actividad BIM en MongoDB. |
+| `POST` | `/api/proyectos/{id}/invitaciones` | El creador genera un código de un uso, válido 7 días, para arquitecto, ingeniero o cliente. |
+| `POST` | `/api/proyectos/invitaciones/aceptar` | Arquitecto, ingeniero o cliente canjea un código que debe coincidir con su rol. |
 | `GET` | `/api/actividades-bim/<id>` | Consulta una actividad propia. |
 | `PUT` | `/api/actividades-bim/<id>` | Actualiza campos permitidos de una actividad propia. |
 | `DELETE` | `/api/actividades-bim/<id>` | Elimina una actividad propia. |
@@ -229,6 +349,8 @@ Las rutas de negocio requieren sesión, excepto las rutas de salud y registro/lo
 | — | `/api/proyectos`, `/api/presupuestos`, `/api/insumos` | Gestión de entidades operativas SQL. |
 
 El CRUD documental valida los campos y comprueba la propiedad del documento. El endpoint mixto principal es `/api/dashboard/resumen`.
+
+Los códigos de proyecto se guardan en SQL solo como hash, caducan a los siete días y se consumen una sola vez. Arquitectos e ingenieros invitados pueden colaborar en partidas y el cliente solo consultar; la API aplica el permiso de solo lectura para clientes. Para probar la recuperación local sin un servidor SMTP, configura `PASSWORD_RESET_DEBUG=1` en `.env` y reinicia el backend: la página mostrará un enlace local de prueba. En producción configura SMTP y deja `PASSWORD_RESET_DEBUG=0`.
 
 Los porcentajes AIU se definen para cada presupuesto y se aplican al costo directo. No se fijan tasas por defecto ni se presentan como tarifas legales: deben corresponder a las condiciones de cada obra y contrato. Los formatos PDF y Word incluyen el desglose; ninguno queda firmado digitalmente.
 
@@ -249,7 +371,7 @@ npm run lint
 npm run build
 ```
 
-Última ejecución registrada: **24 pruebas aprobadas**. Las pruebas usan SQLite en memoria y MongoDB simulado; no son una prueba de conexión real a Atlas.
+Verificación del cierre: **31 pruebas aprobadas**. Las pruebas usan SQLite en memoria y MongoDB simulado; no son una prueba de conexión real a Atlas.
 
 Para documentar una ejecución contra Atlas, registra capturas reales de:
 
@@ -277,6 +399,10 @@ Que Flask inicie no garantiza que MongoDB esté conectado; la ruta de salud ejec
 ### MySQL no está disponible
 
 Revisa el servicio MySQL, host, puerto, usuario, contraseña y nombre de la base en `CATALOG_DATABASE_URL` o en las variables `MYSQL_*`. Para desarrollo local puedes iniciar el catálogo SQLite mediante `start_local.ps1`.
+
+## Entrega 3
+
+Consulta el [cierre de seguridad, casos de uso y evidencias](docs/entrega-3/README.md).
 
 ## Documentación
 

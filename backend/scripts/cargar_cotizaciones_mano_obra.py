@@ -27,6 +27,7 @@ URL_MERCADO = "https://obramaestra.com/co/guias/cuanto-cobrar-mano-de-obra-const
 URL_APU_ELECTRICO = "https://www.solucionesexcel.com/apu/640-instalacion-de-acometida-domiciliaria/"
 URL_APU_ESTRUCTURA = "https://www.solucionesexcel.com/apu/2194-estructura-metalica/"
 URL_APU_CUBIERTA = "https://www.solucionesexcel.com/apu/2241-membrana-pvc-impermeabilizacion-1-5-mm/"
+URL_APU_REFRIGERACION = "https://solucionesexcel.com/apu/3645-ext-tuberia-cobre-1-2-3-8-rubatex/"
 URL_CATEGORIAS_PRESTACIONALES = "https://oneestimate.ai/es/blog/tabla-precios-mano-obra-colombia-2026"
 URL_MONTADOR = "https://agenciapublicadeempleo.sena.edu.co/spe-web/spe/demanda/solicitud-sintesis/4190648"
 URL_COORDINADOR = "https://www.magneto365.com/co/empleos/coordinador-sst-con-curso-de-alturas-vigente-1117464"
@@ -66,6 +67,7 @@ PERFILES = [
     {"nombre": "Enchapador / ceramista", "grupo": "enchapador", "unidad": "jornal", "fuente": "Obra Maestra · mercado 2026", "url": URL_MERCADO, "metodo": "Rango de enchapador/ceramista por ciudad; rendimiento depende del formato, patrón y estado del soporte.", "prestaciones": None},
     {"nombre": "Instalador de cubierta", "grupo": "carpintero", "unidad": "jornal", "fuente": "Obra Maestra · mercado 2026", "url": URL_MERCADO, "metodo": "Rango de carpintero de obra blanca como referencia para instalación liviana de cubierta; para impermeabilización, el APU público consultado usa oficial especializado a $215.944,95/jornal con factor prestacional.", "prestaciones": None},
     {"nombre": "Soldador / armador", "grupo": "soldador_apu", "unidad": "jornal", "fuente": "Soluciones Excel · APU de desmontaje de estructura metálica 2026", "url": "https://solucionesexcel.com/apu/732-desmontaje-y-traslado-de-estructuras-metalicas/", "metodo": "Tarifa de soldador de $215.944,95/jornal reportada en el análisis de mano de obra; incluye factor prestacional según la ficha, no alquiler de equipo.", "prestaciones": True},
+    {"nombre": "Técnico en refrigeración / HVAC", "grupo": "tecnico_hvac", "unidad": "jornal", "fuente": "Soluciones Excel · APU tubería de cobre aislada 2026", "url": URL_APU_REFRIGERACION, "metodo": "APU de referencia del Valle del Cauca: $249.173,27 por jornal de técnico en refrigeración, con factor prestacional. La ficha rinde 20 m por jornal; requiere ajuste regional y por condiciones reales.", "prestaciones": True},
 ]
 
 
@@ -78,6 +80,8 @@ def _rango(perfil, ciudad):
         return 215_944.95, 215_944.95
     if grupo == "soldador_apu":
         return 215_944.95, 215_944.95
+    if grupo == "tecnico_hvac":
+        return 249_173.27, 249_173.27
     if grupo == "operador":
         return 171_100, 171_100
     if grupo == "encofrador":

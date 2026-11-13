@@ -88,12 +88,14 @@ def test_endpoint_excel_presupuesto(mongo_store):
         # 1. Registrar usuario y autenticar
         with cliente.session_transaction() as sess:
             sess["id_usuario"] = 555
+            sess["version_sesion"] = 1
 
         mongo_store["users"]["usuarios"].insert_one({
             "id_usuario": 555,
             "nombre_completo": "Ing. Carlos Mendoza",
             "email": "carlos@bimetrics.local",
             "rol": "ingeniero",
+            "version_sesion": 1,
             "password_hash": "hash-no-usado-en-este-test",
         })
         with engine.begin() as con:

@@ -30,21 +30,25 @@ def recalcular(con, id_pres):
     return limpiar(total)
 
 
-def agregar_linea(con, id_pres, id_insumo, cantidad, ciudad=None):
+def agregar_linea(con, id_pres, id_insumo, cantidad, ciudad=None, capitulo=None):
     """Agrega un insumo copiando su costo vigente del catálogo."""
     cant = numero(cantidad, "cantidad", 0, estricto=True)
     precio = con.execute(text(
-        "SELECT COALESCE(pc.costo_unitario, i.costo_unitario) FROM INSUMOS i "
+        "SELECT COALESCE(pc.costo_unitario, i.costo_unitario), COALESCE(i.activo, 1) FROM INSUMOS i "
         "LEFT JOIN PRECIOS_CIUDAD pc ON pc.id_insumo=i.id_insumo AND pc.ciudad=:ciudad "
-        "WHERE i.id_insumo=:i"), {"i": id_insumo, "ciudad": ciudad or ""}).scalar()
-    if precio is None:
+        "WHERE i.id_insumo=:i"), {"i": id_insumo, "ciudad": ciudad or ""}).first()
+    if not precio:
         raise ErrorApi(400, f"El insumo {id_insumo} no existe")
+    if not precio[1]:
+        raise ErrorApi(400, f"El insumo {id_insumo} está inactivo y no se puede agregar a un presupuesto")
+    precio = precio[0]
     if float(precio) <= 0:
         raise ErrorApi(400, f"No hay un precio de referencia registrado para este insumo en {ciudad or 'la ciudad del proyecto'}")
     con.execute(text(
-        "INSERT INTO DETALLE_PRESUPUESTO (id_presupuesto, id_insumo, cantidad, costo_unitario_aplicado) "
-        "VALUES (:p, :i, :c, :precio)"),
-        {"p": id_pres, "i": id_insumo, "c": cant, "precio": precio})
+        "INSERT INTO DETALLE_PRESUPUESTO (id_presupuesto, id_insumo, cantidad, costo_unitario_aplicado, capitulo) "
+        "VALUES (:p, :i, :c, :precio, :capitulo)"),
+        {"p": id_pres, "i": id_insumo, "c": cant, "precio": precio,
+         "capitulo": (capitulo.strip()[:100] if isinstance(capitulo, str) and capitulo.strip() else None)})
 
 
 def presupuesto_completo(con, id_pres):
@@ -54,9 +58,11 @@ def presupuesto_completo(con, id_pres):
     if p is None:
         raise ErrorApi(404, f"No existe presupuesto con id {id_pres}")
     p["detalle"] = filas(con.execute(text(
-        "SELECT d.id_detalle, d.id_insumo, i.nombre_insumo, i.unidad_medida, d.cantidad, "
+        "SELECT d.id_detalle, d.id_insumo, d.capitulo, "
+        "COALESCE(i.nombre_insumo, 'Insumo #' || d.id_insumo) AS nombre_insumo, "
+        "COALESCE(i.unidad_medida, 'Ud') AS unidad_medida, d.cantidad, "
         "d.costo_unitario_aplicado, ROUND(d.cantidad * d.costo_unitario_aplicado, 2) AS subtotal "
-        "FROM DETALLE_PRESUPUESTO d JOIN INSUMOS i ON i.id_insumo = d.id_insumo "
+        "FROM DETALLE_PRESUPUESTO d LEFT JOIN INSUMOS i ON i.id_insumo = d.id_insumo "
         "WHERE d.id_presupuesto = :p ORDER BY d.id_detalle"), {"p": id_pres}))
     p["costo_directo"] = float(_dinero(sum((Decimal(str(linea.get("subtotal") or 0)) for linea in p["detalle"]), Decimal("0.00"))))
     for etiqueta, columna in (("administracion", "porcentaje_administracion"),

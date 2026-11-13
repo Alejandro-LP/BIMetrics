@@ -7,7 +7,7 @@ El proceso es idempotente y no fija salarios, cantidades ni rendimientos: deben
 definirse según alcance, cotización, ciudad y condiciones de cada obra.
 """
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from app.catalog_models import Partida, RecomendacionManoObra
@@ -19,6 +19,7 @@ CUOC_CONDUCTORES = "https://ocupacol.mintrabajo.gov.co/Profile/OccupationalProfi
 CUOC_ESTRUCTURAS = "https://ocupacol.mintrabajo.gov.co/Profile/OccupationalProfile/72140"
 RESOLUCION_ALTURAS = "https://www.cancilleria.gov.co/normograma/compilacion/docs/resolucion_mtra_4272_2021.htm"
 APU_VIVIENDA = "https://www.minvivienda.gov.co/sites/default/files/normativa/anexo-7-anexo-tecnico-vr_0.pdf"
+APU_TUBERIA_REFRIGERACION = "https://solucionesexcel.com/apu/3645-ext-tuberia-cobre-1-2-3-8-rubatex/"
 
 RECOMENDACIONES = [
     {
@@ -141,6 +142,15 @@ RECOMENDACIONES = [
         "fuente_url": CUOC_ESTRUCTURAS,
         "prioridad": 3,
     },
+    {
+        "codigo": "ICN015",
+        "perfil": "Técnico en refrigeración / HVAC",
+        "tipo": "sugerido",
+        "fundamento": "APU público de tubería de cobre aislada para refrigeración: 1 técnico de refrigeración ejecuta 20 m por jornal. BIMetrics calcula jornales como cantidad de la partida / 20; ajustar el rendimiento si cambian diámetro, acceso, uniones o condiciones de obra.",
+        "fuente_url": APU_TUBERIA_REFRIGERACION,
+        "prioridad": 1,
+        "rendimiento_por_jornal": 20,
+    },
 ]
 
 
@@ -152,6 +162,14 @@ def main():
 
     tabla = RecomendacionManoObra.__table__
     tabla.create(engine, checkfirst=True)
+    if "rendimiento_por_jornal" not in {
+        columna["name"] for columna in inspect(engine).get_columns(tabla.name)
+    }:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE recomendaciones_mano_obra "
+                "ADD COLUMN rendimiento_por_jornal DECIMAL(12, 6) NULL"
+            ))
     codigos = sorted({item["codigo"] for item in RECOMENDACIONES})
     try:
         with engine.begin() as connection:
@@ -162,12 +180,17 @@ def main():
             if faltantes:
                 raise RuntimeError(f"No existen estas partidas en el catálogo: {', '.join(faltantes)}")
 
-            instruccion = mysql_insert(tabla).values(RECOMENDACIONES)
+            recomendaciones = [
+                {**item, "rendimiento_por_jornal": item.get("rendimiento_por_jornal")}
+                for item in RECOMENDACIONES
+            ]
+            instruccion = mysql_insert(tabla).values(recomendaciones)
             instruccion = instruccion.on_duplicate_key_update(
                 tipo=instruccion.inserted.tipo,
                 fundamento=instruccion.inserted.fundamento,
                 fuente_url=instruccion.inserted.fuente_url,
                 prioridad=instruccion.inserted.prioridad,
+                rendimiento_por_jornal=instruccion.inserted.rendimiento_por_jornal,
             )
             connection.execute(instruccion)
             total = connection.execute(

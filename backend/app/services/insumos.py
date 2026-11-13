@@ -1,16 +1,17 @@
 """Casos de uso y persistencia del catálogo de insumos y precios."""
 
 from sqlalchemy import text
+import math
 
 from ..database import operational_engine
 from ..errors import ErrorApi
 from ..utils import en_uso, filas, numero, obtener
 
 
-def listar_insumos(texto_busqueda="", ciudad=""):
+def listar_insumos(texto_busqueda="", ciudad="", incluir_inactivos=False):
     """Lista insumos con precio de ciudad cuando existe."""
     consulta = text(
-        "SELECT i.id_insumo, i.nombre_insumo, i.unidad_medida, "
+        "SELECT i.id_insumo, i.nombre_insumo, i.unidad_medida, i.activo, "
         "COALESCE(pc.costo_unitario, i.costo_unitario) AS costo_unitario, "
         "CASE WHEN pc.id_precio IS NULL THEN 'referencia_general' ELSE 'precio_ciudad' END AS origen_precio, "
         "q.valor_minimo AS cotizacion_minima, q.valor_maximo AS cotizacion_maxima, "
@@ -21,10 +22,11 @@ def listar_insumos(texto_busqueda="", ciudad=""):
         "ON pc.id_insumo=i.id_insumo AND pc.ciudad=:ciudad "
         "LEFT JOIN COTIZACIONES_MANO_OBRA q "
         "ON q.id_insumo=i.id_insumo AND q.ciudad=:ciudad "
-        "WHERE i.nombre_insumo LIKE :q ORDER BY i.nombre_insumo"
+        "WHERE i.nombre_insumo LIKE :q AND (:inactivos=1 OR COALESCE(i.activo,1)=1) ORDER BY i.nombre_insumo"
     )
     with operational_engine.connect() as connection:
-        return filas(connection.execute(consulta, {"q": f"%{texto_busqueda}%", "ciudad": ciudad}))
+        return filas(connection.execute(consulta, {"q": f"%{texto_busqueda}%", "ciudad": ciudad,
+                                                    "inactivos": 1 if incluir_inactivos else 0}))
 
 
 def obtener_insumo(id_insumo):
@@ -113,3 +115,48 @@ def eliminar_insumo(id_insumo):
             raise ErrorApi(409, "El insumo está en uso en algún presupuesto")
         connection.execute(text("DELETE FROM COTIZACIONES_MANO_OBRA WHERE id_insumo=:id"), {"id": id_insumo})
         connection.execute(text("DELETE FROM INSUMOS WHERE id_insumo = :id"), {"id": id_insumo})
+
+
+def actualizar_estado_insumo(id_insumo, activo):
+    """Activa o archiva un insumo sin borrar su historial presupuestario."""
+    if not isinstance(activo, bool):
+        raise ErrorApi(400, "activo debe ser booleano")
+    with operational_engine.begin() as connection:
+        obtener(connection, "INSUMOS", "id_insumo", id_insumo)
+        connection.execute(text("UPDATE INSUMOS SET activo=:activo WHERE id_insumo=:id"),
+                           {"activo": 1 if activo else 0, "id": id_insumo})
+        return obtener(connection, "INSUMOS", "id_insumo", id_insumo)
+
+
+def ajustar_precios_masivamente(ciudad, porcentaje, ids_insumos=None):
+    """Aplica un ajuste porcentual, auditable y acotado, a precios de una ciudad."""
+    if not isinstance(ciudad, str) or not ciudad.strip() or len(ciudad.strip()) > 100:
+        raise ErrorApi(400, "Indica una ciudad válida para ajustar sus precios")
+    if isinstance(porcentaje, bool):
+        raise ErrorApi(400, "El porcentaje debe ser un número entre -100 y 500")
+    try:
+        porcentaje = float(porcentaje)
+    except (TypeError, ValueError) as error:
+        raise ErrorApi(400, "El porcentaje debe ser un número entre -100 y 500") from error
+    if not math.isfinite(porcentaje) or not -100 <= porcentaje <= 500:
+        raise ErrorApi(400, "El porcentaje debe estar entre -100 y 500")
+    if ids_insumos is not None and (
+        not isinstance(ids_insumos, list)
+        or not ids_insumos
+        or len(ids_insumos) > 500
+        or any(isinstance(item, bool) or not isinstance(item, int) or item < 1 for item in ids_insumos)
+    ):
+        raise ErrorApi(400, "ids_insumos debe ser una lista de 1 a 500 identificadores positivos")
+
+    with operational_engine.begin() as connection:
+        filtros = "ciudad=:ciudad"
+        parametros = {"ciudad": ciudad.strip(), "factor": 1 + porcentaje / 100}
+        if ids_insumos is not None:
+            marcadores = ",".join(f":id_{indice}" for indice, _ in enumerate(ids_insumos))
+            filtros += f" AND id_insumo IN ({marcadores})"
+            parametros.update({f"id_{indice}": item for indice, item in enumerate(ids_insumos)})
+        resultado = connection.execute(
+            text(f"UPDATE PRECIOS_CIUDAD SET costo_unitario=ROUND(costo_unitario * :factor, 2) WHERE {filtros}"),
+            parametros,
+        )
+        return {"ciudad": ciudad.strip(), "porcentaje_aplicado": porcentaje, "precios_actualizados": resultado.rowcount}

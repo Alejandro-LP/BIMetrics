@@ -138,6 +138,7 @@ paths:
     post:
       tags: [Autenticación]
       summary: Cierra la sesión actual
+      security: []
       parameters:
         - $ref: '#/components/parameters/Origin'
       responses:
@@ -147,7 +148,7 @@ paths:
       tags: [Dashboard]
       summary: Obtiene el resumen SQL y la actividad BIM del usuario
       responses:
-        '200': { description: Resumen con cantidad de partidas base y variaciones desde el catálogo SQL, métricas operativas y actividad BIM de MongoDB }
+        '200': { description: "Resumen de partidas, variaciones, métricas operativas y actividad BIM" }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '503': { $ref: '#/components/responses/Unavailable' }
   /proyectos:
@@ -738,6 +739,111 @@ paths:
         '204': { description: Usuario eliminado }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /presupuestos/{id}/mano-obra-asociada:
+    post:
+      tags: [Presupuestos]
+      summary: Incorpora la mano de obra asociada a equipos del presupuesto
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: Presupuesto actualizado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /salud/sql:
+    get:
+      tags: [Salud]
+      summary: Verifica la conexión con el catálogo SQL
+      security: []
+      responses:
+        '200': { description: Catálogo disponible y conteo de partidas y variaciones }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /auth/solicitar-restablecimiento:
+    post:
+      tags: [Autenticación]
+      summary: Solicita un enlace para recuperar la contraseña
+      description: La respuesta habitual no indica si el correo pertenece a una cuenta.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: Solicitud procesada }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /auth/restablecer-password:
+    post:
+      tags: [Autenticación]
+      summary: Restablece la contraseña con un token de un solo uso
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string, minLength: 32, maxLength: 128 }
+                password: { type: string, format: password, minLength: 10, maxLength: 128 }
+      responses:
+        '200': { description: Contraseña actualizada }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /proyectos/{id}/invitaciones:
+    post:
+      tags: [Proyectos]
+      summary: El propietario crea un código de un uso para un rol específico
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rol]
+              properties:
+                rol: { type: string, enum: [arquitecto, ingeniero, cliente] }
+      responses:
+        '201': { description: Invitación creada }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /proyectos/invitaciones/aceptar:
+    post:
+      tags: [Proyectos]
+      summary: Canjea un código de invitación compatible con el rol de la cuenta
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo]
+              properties:
+                codigo: { type: string }
+      responses:
+        '200': { description: Acceso al proyecto concedido }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
   schemas:
     AIU:
@@ -748,24 +854,6 @@ components:
         imprevistos: { type: number, minimum: 0, maximum: 100, default: 0 }
         utilidad: { type: number, minimum: 0, maximum: 100, default: 0 }
       additionalProperties: false
-  securitySchemes:
-    sessionCookie:
-      type: apiKey
-      in: cookie
-      name: session
-      description: Cookie firmada de sesión Flask, emitida al registrarse o iniciar sesión.
-  parameters:
-    Id:
-      in: path
-      name: id
-      required: true
-      schema: { type: integer, minimum: 1 }
-    Origin:
-      in: header
-      name: Origin
-      required: true
-      schema: { type: string, format: uri }
-      description: Debe coincidir con uno de los orígenes definidos en CORS_ORIGIN.
     Registro:
       type: object
       required: [nombre_completo, email, password, rol, autoriza_datos]
@@ -785,7 +873,7 @@ components:
         software_origen: { type: string, maxLength: 120 }
         nombre_archivo: { type: string, maxLength: 255 }
         estado: { type: string, enum: [completado, advertencia, fallido] }
-        detalles_bim: { type: object, description: Objeto JSON flexible, máximo 1 MB }
+        detalles_bim: { type: object, description: "Objeto JSON flexible, máximo 1 MB" }
     Insumo:
       type: object
       required: [nombre_insumo, unidad_medida, costo_unitario]
@@ -822,6 +910,24 @@ components:
         email: { type: string, format: email }
         rol: { type: string, enum: [cliente, arquitecto, ingeniero, administrador] }
         password: { type: string, format: password, minLength: 10, maxLength: 128 }
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Cookie firmada de sesión Flask, emitida al registrarse o iniciar sesión.
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Origin:
+      in: header
+      name: Origin
+      required: true
+      schema: { type: string, format: uri }
+      description: Debe coincidir con uno de los orígenes definidos en CORS_ORIGIN.
   responses:
     BadRequest:
       description: Solicitud o datos inválidos

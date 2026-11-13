@@ -46,6 +46,14 @@ CORS_ORIGIN = os.getenv(
 )
 SECRET_KEY = os.getenv("SECRET_KEY")
 ROLES = {"arquitecto", "ingeniero", "administrador", "cliente"}
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5173").rstrip("/")
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USERNAME)
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "1").strip().lower() in {"1", "true", "yes"}
+PASSWORD_RESET_DEBUG = os.getenv("PASSWORD_RESET_DEBUG", "0").strip() == "1"
 
 # Configuración NoSQL (MongoDB) para telemetría, logs BIM e importaciones
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")

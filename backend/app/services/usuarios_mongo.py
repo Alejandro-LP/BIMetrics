@@ -11,6 +11,7 @@ from ..errors import ErrorApi
 
 COLECCION_USUARIOS = "usuarios"
 COLECCION_CONTADORES = "contadores"
+COLECCION_RESTABLECIMIENTOS = "restablecimientos_password"
 
 
 def _coleccion():
@@ -23,6 +24,9 @@ def asegurar_indices_usuarios():
         coleccion = _coleccion()
         coleccion.create_index([("id_usuario", ASCENDING)], unique=True, name="uq_usuario_id")
         coleccion.create_index([("email", ASCENDING)], unique=True, name="uq_usuario_email")
+        restablecimientos = get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS]
+        restablecimientos.create_index([("id_usuario", ASCENDING)], unique=True, name="uq_reset_usuario")
+        restablecimientos.create_index([("expira_en", ASCENDING)], expireAfterSeconds=0, name="ttl_reset_expiracion")
     except PyMongoError:
         from flask import current_app
 
@@ -55,6 +59,7 @@ def crear_usuario(nombre, email, password_hash, rol, autoriza_datos):
         "nombre_completo": nombre,
         "email": email,
         "password_hash": password_hash,
+        "version_sesion": 1,
         "rol": rol,
         "preferencias": {},
         "autorizacion_datos": {
@@ -86,6 +91,51 @@ def obtener_documento_usuario(id_usuario):
     return _coleccion().find_one({"id_usuario": int(id_usuario)})
 
 
+def obtener_version_sesion(id_usuario):
+    documento = _coleccion().find_one({"id_usuario": int(id_usuario)}, {"version_sesion": 1})
+    return int(documento.get("version_sesion", 1)) if documento else None
+
+
+def obtener_restablecimiento_usuario(id_usuario):
+    return get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].find_one({"id_usuario": int(id_usuario)})
+
+
+def guardar_restablecimiento(id_usuario, token_hash, creado_en, expira_en):
+    get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].update_one(
+        {"id_usuario": int(id_usuario)},
+        {"$set": {
+            "token_hash": token_hash,
+            "creado_en": creado_en,
+            "expira_en": expira_en,
+            "usado_en": None,
+        }},
+        upsert=True,
+    )
+
+
+def eliminar_restablecimiento(id_usuario, token_hash):
+    """Retira el token si no se pudo entregar por correo."""
+    get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].delete_one(
+        {"id_usuario": int(id_usuario), "token_hash": token_hash}
+    )
+
+
+def consumir_restablecimiento(token_hash, ahora):
+    return get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].find_one_and_update(
+        {"token_hash": token_hash, "expira_en": {"$gt": ahora}, "usado_en": None},
+        {"$set": {"usado_en": ahora}},
+        return_document=ReturnDocument.BEFORE,
+    )
+
+
+def actualizar_password_restablecida(id_usuario, password_hash, ahora):
+    return _coleccion().update_one(
+        {"id_usuario": int(id_usuario)},
+        {"$set": {"password_hash": password_hash, "fecha_actualizacion": ahora},
+         "$inc": {"version_sesion": 1}},
+    ).matched_count == 1
+
+
 def obtener_usuario_por_email(email):
     """Busca una identidad por correo normalizado."""
     documento = _coleccion().find_one({"email": email.strip().lower()})
@@ -109,9 +159,10 @@ def actualizar_perfil(id_usuario, nombre, email, password_hash=None):
     cambios = {"nombre_completo": nombre, "email": email, "fecha_actualizacion": datetime.now(timezone.utc)}
     if password_hash:
         cambios["password_hash"] = password_hash
-    resultado = _coleccion().find_one_and_update(
-        {"id_usuario": int(id_usuario)}, {"$set": cambios}, return_document=ReturnDocument.AFTER
-    )
+    actualizacion = {"$set": cambios}
+    if password_hash:
+        actualizacion["$inc"] = {"version_sesion": 1}
+    resultado = _coleccion().find_one_and_update({"id_usuario": int(id_usuario)}, actualizacion, return_document=ReturnDocument.AFTER)
     return _publico(resultado)
 
 
@@ -134,13 +185,14 @@ def crear_o_actualizar_admin(datos, id_usuario=None, password_hash=None):
             {"_id": "id_usuario"}, {"$inc": {"valor": 1}}, upsert=True,
             return_document=ReturnDocument.AFTER,
         )
-        documento = {**cambios, "id_usuario": secuencia["valor"], "password_hash": password_hash, "preferencias": {},
+        documento = {**cambios, "id_usuario": secuencia["valor"], "password_hash": password_hash, "version_sesion": 1, "preferencias": {},
             "autorizacion_datos": {"aceptada": True, "version": "admin"},
             "fecha_creacion": datetime.now(timezone.utc)}
         coleccion.insert_one(documento)
         return _publico(documento)
     if password_hash:
         cambios["password_hash"] = password_hash
+        coleccion.update_one({"id_usuario": int(id_usuario)}, {"$inc": {"version_sesion": 1}})
     actualizado = coleccion.find_one_and_update(
         {"id_usuario": int(id_usuario)}, {"$set": cambios}, return_document=ReturnDocument.AFTER
     )

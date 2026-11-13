@@ -1,10 +1,15 @@
 """Casos de uso de registro, autenticación y perfil de usuario en MongoDB."""
 
 import re
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 
+from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..errors import ErrorApi
+from .correo import enviar_enlace_restablecimiento
 from .usuarios_mongo import (
     autenticar,
     crear_usuario,
@@ -14,6 +19,11 @@ from .usuarios_mongo import (
     actualizar_perfil as persistir_perfil,
     actualizar_preferencias as persistir_preferencias,
     obtener_preferencias as consultar_preferencias,
+    obtener_restablecimiento_usuario,
+    guardar_restablecimiento,
+    eliminar_restablecimiento,
+    consumir_restablecimiento,
+    actualizar_password_restablecida,
 )
 
 _EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -51,6 +61,60 @@ def autenticar_usuario(email, password):
     if not isinstance(email, str) or not isinstance(password, str):
         raise ErrorApi(400, "Correo y contraseña deben ser texto")
     return autenticar(email, password)
+
+
+def solicitar_restablecimiento(email):
+    """Genera y entrega un token de un solo uso, sin revelar si existe el correo."""
+    if not isinstance(email, str) or not _EMAIL.match(email.strip().lower()):
+        return
+    usuario = obtener_usuario_por_email(email.strip().lower())
+    if not usuario:
+        return
+
+    ahora = datetime.now(timezone.utc)
+    solicitud_previa = obtener_restablecimiento_usuario(usuario["id_usuario"])
+    creado_previo = solicitud_previa.get("creado_en") if solicitud_previa else None
+    if creado_previo:
+        if creado_previo.tzinfo is None:
+            creado_previo = creado_previo.replace(tzinfo=timezone.utc)
+        if (ahora - creado_previo).total_seconds() < 60:
+            return
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    guardar_restablecimiento(
+        usuario["id_usuario"],
+        token_hash,
+        ahora,
+        ahora + timedelta(minutes=30),
+    )
+    if not enviar_enlace_restablecimiento(usuario["email"], token):
+        eliminar_restablecimiento(usuario["id_usuario"], token_hash)
+        return None
+
+    # El enlace se muestra en la respuesta únicamente si se habilitó el modo
+    # local explícito; en producción nunca se expone el token por la API.
+    if current_app.config.get("PASSWORD_RESET_DEBUG") and current_app.config.get("BIMETRICS_ENV") != "production":
+        return {"enlace_desarrollo": f"{current_app.config['APP_BASE_URL']}/restablecer?token={token}"}
+    return None
+
+
+def restablecer_password(token, nueva_password):
+    """Consume un token expirable y reemplaza el hash de contraseña del usuario."""
+    if not isinstance(token, str) or not 32 <= len(token) <= 128:
+        raise ErrorApi(400, "El enlace de restablecimiento no es válido o ya expiró")
+    if not isinstance(nueva_password, str) or not 10 <= len(nueva_password) <= 128:
+        raise ErrorApi(400, "La contraseña debe tener entre 10 y 128 caracteres")
+    ahora = datetime.now(timezone.utc)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    restablecimiento = consumir_restablecimiento(token_hash, ahora)
+    if not restablecimiento:
+        raise ErrorApi(400, "El enlace de restablecimiento no es válido o ya expiró")
+    actualizada = actualizar_password_restablecida(
+        restablecimiento["id_usuario"], generate_password_hash(nueva_password), ahora
+    )
+    if not actualizada:
+        raise ErrorApi(400, "No se pudo restablecer la contraseña. Solicita un enlace nuevo")
 
 
 def obtener_sesion_usuario(id_usuario):
