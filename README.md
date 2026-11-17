@@ -25,7 +25,7 @@ El sistema implementa una **arquitectura de persistencia políglota**, combinand
 - [Persistencia, datos y scripts](#persistencia-datos-y-scripts)
   - [Distribución de datos](#distribución-de-datos)
   - [Gestión y mantenimiento del catálogo](#gestión-y-mantenimiento-del-catálogo)
-  - [Importación de cómputos TXT (Revit y Archicad)](#importación-de-cómputos-txt-revit-y-archicad)
+  - [Importación de cantidades BIM](#importación-de-cantidades-bim)
   - [Scripts utilitarios disponibles](#scripts-utilitarios-disponibles)
 - [Referencia de la API REST](#referencia-de-la-api-rest)
 - [Pruebas y calidad de código](#pruebas-y-calidad-de-código)
@@ -306,12 +306,15 @@ El catálogo maestro incluye más de 3.000 partidas y variaciones del sector de 
   ..\.venv\Scripts\python.exe -m scripts.generar_catalogo_sql
   ```
 
-### Importación de cómputos TXT (Revit y Archicad)
+### Importación de cantidades BIM
 
-La aplicación permite subir cómputos tabulados exportados desde Revit o Archicad:
-- Admite archivos de hasta 5 MB y hasta 1.000 registros.
-- Detección automática de codificaciones de texto (`UTF-8`, `UTF-16`, `Windows-1252`).
-- Asocia automáticamente columnas de elemento/tipo y cantidad, proponiendo la partida correspondiente del catálogo SQL para revisión previa del usuario.
+Selecciona un presupuesto y abre **Importar cantidades BIM**. Puedes usar tres orígenes:
+
+- **Modelo IFC.** En Archicad, abre **Archivo → Interoperabilidad → IFC → Traductores IFC** y activa **Cantidades base IFC** en **Conversión de datos** del traductor de exportación. Desde el modelo, usa **Archivo → Guardar como** y elige el tipo **IFC (.ifc)** con ese mismo traductor. En BIMetrics selecciona **Modelo IFC**, elige la medida y analiza el archivo. El límite es de 25 MB y 1.000 grupos. BIMetrics lee las cantidades guardadas en el IFC, las convierte a unidades métricas y agrupa los elementos por tipo o nombre, clase IFC y campo de cantidad. Los elementos sin la medida solicitada se indican en la vista previa. [Configuración oficial de Archicad](https://help.graphisoft.com/START/27/SPA/_AC27_Help/121_IFC/121_IFC-42.htm)
+- **Pegar tabla.** Si la versión de Archicad permite copiar las celdas como texto, pégalas con sus encabezados. Usa por ejemplo **Nombre**, **Cantidad** y **Unidad**, y selecciona coma o punto decimal según las cantidades que ves en el listado.
+- **Archivo TXT.** Se conservan los cómputos exportados desde Revit o Archicad, en UTF-8, UTF-16 o Windows-1252. El archivo puede pesar hasta 5 MB y contener hasta 1.000 filas de elementos.
+
+La vista previa se analiza sin modificar el presupuesto. Confirma la partida del catálogo antes de agregar cada fila. El backend aplica el precio vigente de la partida. Si ya tienes el backend instalado, actualiza sus dependencias con `uv pip install --python .venv/Scripts/python.exe -r backend/requirements.txt` desde la raíz y reinícialo.
 
 ### Scripts utilitarios disponibles
 
@@ -368,6 +371,8 @@ Todas las peticiones que mutan estado (`POST`, `PUT`, `PATCH`, `DELETE`) exigen 
 - `POST /api/presupuestos/{id}/calcular`: Recálculo y consolidación de totales.
 - `POST /api/presupuestos/{id}/duplicar`: Duplicación de versión presupuestaria.
 - `POST /api/presupuestos/{id}/importar-txt/analizar`: Análisis de tabla tabulada de Revit o Archicad con sugerencias de partidas.
+- `POST /api/presupuestos/{id}/importar-ifc/analizar`: Vista previa de una medida incluida en un modelo `.ifc` y sugerencias del catálogo con la unidad correspondiente.
+- `POST /api/presupuestos/{id}/importar-tabla/analizar`: Vista previa de un listado pegado con coma o punto decimal.
 - `POST /api/presupuestos/{id}/mano-obra-asociada`: Sugerencias de jornales y cuadrillas requeridas.
 - `GET /api/presupuestos/{id}/excel`: Descarga de presupuesto en formato Excel (`.xlsx`).
 - `GET /api/presupuestos/{id}/pdf`: Descarga de presupuesto en formato PDF estructurado.
@@ -389,6 +394,8 @@ Todas las peticiones que mutan estado (`POST`, `PUT`, `PATCH`, `DELETE`) exigen 
 - `GET /api/actividades-bim/usuario/{id_usuario}`: Historial cronológico de eventos BIM del usuario.
 - `GET /api/dashboard/resumen`: Endpoint políglota unificado con métricas de obras, presupuestos y actividad reciente.
 - `GET /api/dashboard/administracion`: Estadísticas globales de cuentas por rol, obras, obras compartidas, presupuestos y actividad BIM por estado. Se accede desde **Administración** con una cuenta administradora.
+- En **Administración → Usuarios** se pueden crear cuentas, asignar el rol **Administrador** a otra persona y buscar, editar o eliminar usuarios. Cambiar el rol cierra las sesiones de esa cuenta. La API protege la cuenta desde la que se administra y bloquea el borrado de propietarios de proyectos.
+- En **Administración → Precios del catálogo** se puede actualizar el precio base de una partida o buscar un insumo por ciudad y editar el precio local. Los cambios usan `PATCH /api/partidas/{codigo}/precio` y `PATCH /api/insumos/{id}/precio-ciudad`. Al agregar una partida se usa el precio de la ciudad si ya está registrado. Las líneas guardadas conservan el costo que se aplicó al crearlas.
 
 ---
 

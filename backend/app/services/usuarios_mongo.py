@@ -205,7 +205,7 @@ def listar_usuarios(rol=None):
     return [_publico(documento) for documento in cursor]
 
 
-def crear_o_actualizar_admin(datos, id_usuario=None, password_hash=None):
+def crear_o_actualizar_admin(datos, id_usuario=None, password_hash=None, invalidar_sesiones=False):
     """Crea o actualiza usuarios desde el módulo administrativo."""
     coleccion = _coleccion()
     email = datos["e"]
@@ -225,6 +225,7 @@ def crear_o_actualizar_admin(datos, id_usuario=None, password_hash=None):
     actualizacion = {"$set": cambios, "$unset": {"restablecimiento": ""}}
     if password_hash:
         cambios["password_hash"] = password_hash
+    if password_hash or invalidar_sesiones:
         actualizacion["$inc"] = {"version_sesion": 1}
     actualizado = coleccion.find_one_and_update(
         {"id_usuario": int(id_usuario)}, actualizacion, return_document=ReturnDocument.AFTER

@@ -34,7 +34,7 @@ def crear():
     if not isinstance(datos, dict):
         raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
     usuario = validar_usuario(datos, session.get("id_usuario"), requiere_password=True)
-    return jsonify(crear_usuario(usuario)), 201
+    return jsonify(crear_usuario(usuario, session["id_usuario"])), 201
 
 
 @bp.put("/<int:id>")
@@ -44,11 +44,11 @@ def actualizar(id):
     if not isinstance(datos, dict):
         raise ErrorApi(400, "El cuerpo de la solicitud debe ser un objeto JSON")
     usuario = validar_usuario(datos, session.get("id_usuario"))
-    return jsonify(actualizar_usuario(id, usuario))
+    return jsonify(actualizar_usuario(id, usuario, session["id_usuario"]))
 
 
 @bp.delete("/<int:id>")
 def eliminar(id):
     """Elimina el usuario si no tiene proyectos asociados."""
-    eliminar_usuario(id)
+    eliminar_usuario(id, session["id_usuario"])
     return "", 204

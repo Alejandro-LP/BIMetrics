@@ -1,5 +1,8 @@
 """Casos de uso administrativos de identidades persistidas en MongoDB."""
 
+from contextlib import contextmanager
+
+from pymongo.errors import DuplicateKeyError
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
@@ -58,38 +61,63 @@ def obtener_usuario(id_usuario):
     return usuario
 
 
-def crear_usuario(datos):
-    """Crea una cuenta administrativa en el repositorio MongoDB."""
-    if obtener_usuario_por_email(datos["e"]):
-        raise ErrorApi(409, "Ese correo ya está asociado a otra cuenta")
-    return crear_o_actualizar_admin(datos, password_hash=datos["password_hash"])
-
-
-def actualizar_usuario(id_usuario, datos):
-    """Actualiza un perfil existente y valida unicidad de correo."""
-    obtener_usuario(id_usuario)
-    existente = obtener_usuario_por_email(datos["e"])
-    if existente and existente["id_usuario"] != int(id_usuario):
-        raise ErrorApi(409, "Ese correo ya está asociado a otra cuenta")
-    actualizado = crear_o_actualizar_admin(
-        datos, id_usuario=id_usuario, password_hash=datos.get("password_hash")
-    )
-    if not actualizado:
-        raise ErrorApi(404, f"No existe usuario con id {id_usuario}")
-    return actualizado
-
-
-def eliminar_usuario(id_usuario):
-    """Elimina una identidad que no sea propietaria de proyectos."""
-    obtener_usuario(id_usuario)
+@contextmanager
+def _cambio_administrativo(id_solicitante):
+    """Serializa cambios en SQLite y vuelve a comprobar el rol del solicitante."""
     with operational_engine.begin() as connection:
+        if connection.dialect.name == "sqlite":
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        solicitante = obtener_documento_usuario(id_solicitante)
+        if not solicitante or solicitante["rol"] != "administrador":
+            raise ErrorApi(403, "Solo un administrador puede gestionar usuarios")
+        yield connection
+
+
+def crear_usuario(datos, id_solicitante):
+    """Crea una cuenta en el repositorio MongoDB."""
+    with _cambio_administrativo(id_solicitante):
+        if obtener_usuario_por_email(datos["e"]):
+            raise ErrorApi(409, "Ese correo ya está asociado a otra cuenta")
+        try:
+            return crear_o_actualizar_admin(datos, password_hash=datos["password_hash"])
+        except DuplicateKeyError as error:
+            raise ErrorApi(409, "No se pudo crear la cuenta. Revisa si el correo ya está en uso.") from error
+
+
+def actualizar_usuario(id_usuario, datos, id_solicitante):
+    """Actualiza un perfil existente y valida unicidad de correo."""
+    with _cambio_administrativo(id_solicitante):
+        if id_usuario == id_solicitante and datos["r"] != "administrador":
+            raise ErrorApi(409, "Tu cuenta debe conservar el rol de administrador")
+        anterior = obtener_usuario(id_usuario)
+        existente = obtener_usuario_por_email(datos["e"])
+        if existente and existente["id_usuario"] != id_usuario:
+            raise ErrorApi(409, "Ese correo ya está asociado a otra cuenta")
+        try:
+            actualizado = crear_o_actualizar_admin(
+                datos, id_usuario=id_usuario, password_hash=datos.get("password_hash"),
+                invalidar_sesiones=anterior["rol"] != datos["r"],
+            )
+        except DuplicateKeyError as error:
+            raise ErrorApi(409, "Ese correo ya está asociado a otra cuenta") from error
+        if not actualizado:
+            raise ErrorApi(404, "El usuario no existe")
+        return actualizado
+
+
+def eliminar_usuario(id_usuario, id_solicitante):
+    """Elimina una identidad que no sea propietaria de proyectos."""
+    with _cambio_administrativo(id_solicitante) as connection:
+        if id_usuario == id_solicitante:
+            raise ErrorApi(409, "No puedes eliminar la cuenta con la que has iniciado sesión")
+        obtener_usuario(id_usuario)
         proyectos_propios = connection.execute(
             text("SELECT COUNT(*) FROM PROYECTOS WHERE id_usuario=:id"), {"id": id_usuario}
         ).scalar()
         if proyectos_propios:
-            raise ErrorApi(409, "El usuario tiene proyectos asociados")
+            raise ErrorApi(409, "Esta cuenta es propietaria de proyectos y no puede eliminarse mientras los conserve")
         connection.execute(
             text("DELETE FROM PROYECTO_COLABORADORES WHERE id_usuario=:id OR invitado_por=:id"),
             {"id": id_usuario},
         )
-    borrar_usuario_documento(id_usuario)
+        borrar_usuario_documento(id_usuario)

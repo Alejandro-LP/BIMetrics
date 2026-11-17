@@ -7,6 +7,7 @@ from ..errors import ErrorApi
 from ..extensions import db
 from ..services.partida_service import buscar_partidas, listar_partidas, obtener_partida, serializar_partida
 from ..services.usuarios_mongo import obtener_usuario
+from ..utils import pedir, precio_catalogo
 
 bp = Blueprint("partidas", __name__, url_prefix="/api/partidas")
 
@@ -145,3 +146,17 @@ def eliminar(codigo):
     db.session.delete(partida)
     db.session.commit()
     return "", 204
+
+
+@bp.patch("/<string:codigo>/precio")
+def actualizar_precio(codigo):
+    """Actualiza el precio base sin reescribir la ficha ni sus variaciones."""
+    _exigir_administrador()
+    datos = pedir(("precio_defecto",))
+    precio = precio_catalogo(datos["precio_defecto"])
+    partida = db.session.get(Partida, codigo)
+    if not partida:
+        raise ErrorApi(404, "Partida no encontrada")
+    partida.precio_defecto = precio
+    db.session.commit()
+    return jsonify(serializar_partida(partida))

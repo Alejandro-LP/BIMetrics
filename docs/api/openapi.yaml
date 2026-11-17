@@ -156,7 +156,7 @@ paths:
       tags: [Dashboard]
       summary: Consulta estadísticas globales con una cuenta administradora
       responses:
-        '200': { description: Conteos de proyectos, proyectos compartidos, presupuestos, cuentas por rol y actividad BIM por estado }
+        '200': { description: 'Conteos de proyectos, proyectos compartidos, presupuestos, cuentas por rol y actividad BIM por estado' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '503': { $ref: '#/components/responses/Unavailable' }
@@ -465,6 +465,59 @@ paths:
         '204': { description: Partida eliminada }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /insumos/{id}/precio-ciudad:
+    patch:
+      tags: [Insumos]
+      summary: Registra o actualiza el precio de un insumo para una ciudad (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ciudad, costo_unitario]
+              properties:
+                ciudad: { type: string, maxLength: 100 }
+                costo_unitario:
+                  oneOf:
+                    - { type: number, minimum: 0, maximum: 999999999999.99, multipleOf: 0.01 }
+                    - { type: string, pattern: '^[0-9]{1,12}(\.[0-9]{1,2})?$' }
+      responses:
+        '200': { description: Insumo con el precio de la ciudad }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /partidas/{codigo}/precio:
+    patch:
+      tags: [Partidas]
+      summary: Actualiza el precio base del catálogo (solo administradores)
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - in: path
+          name: codigo
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [precio_defecto]
+              properties:
+                precio_defecto:
+                  description: Precio en COP con hasta dos decimales
+                  oneOf:
+                    - { type: number, minimum: 0, maximum: 999999999999.99, multipleOf: 0.01 }
+                    - { type: string, pattern: '^[0-9]{1,12}(\.[0-9]{1,2})?$' }
+      responses:
+        '200': { description: Partida con el nuevo precio }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /actividades-bim:
     post:
       tags: [Actividad BIM]
@@ -696,6 +749,54 @@ paths:
         '200': { description: Filas reconocidas con hasta tres partidas candidatas del catálogo SQL }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /presupuestos/{id}/importar-ifc/analizar:
+    post:
+      tags: [Presupuestos]
+      summary: Analiza una medida incluida en un archivo IFC
+      description: Límite de 25 MB y 1000 grupos. La vista previa no agrega ni modifica líneas del presupuesto.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo, medida]
+              properties:
+                archivo: { type: string, format: binary }
+                medida: { type: string, enum: [longitud, area_neta, area_bruta, volumen_neto, volumen_bruto] }
+      responses:
+        '200': { description: Grupos de cantidades IFC convertidas a unidades métricas y partidas candidatas }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: El archivo o la cantidad de grupos supera el límite }
+  /presupuestos/{id}/importar-tabla/analizar:
+    post:
+      tags: [Presupuestos]
+      summary: Analiza una tabla de cantidades pegada como texto
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texto, software]
+              properties:
+                texto: { type: string }
+                software: { type: string, enum: [revit, archicad] }
+                separador_decimal: { type: string, enum: [',', '.'], default: ',' }
+      responses:
+        '200': { description: Filas reconocidas y partidas candidatas }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: El texto o la cantidad de filas supera el límite }
   /presupuestos/{id}/detalle/{detalle_id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -804,7 +905,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [Usuarios]
-      summary: Elimina usuario sin proyectos (solo administradores)
+      summary: Elimina otra cuenta sin proyectos propios (solo administradores)
       parameters:
         - $ref: '#/components/parameters/Origin'
       responses:

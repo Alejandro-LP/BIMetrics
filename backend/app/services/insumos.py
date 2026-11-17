@@ -5,7 +5,7 @@ import math
 
 from ..database import operational_engine
 from ..errors import ErrorApi
-from ..utils import en_uso, filas, numero, obtener
+from ..utils import en_uso, filas, numero, obtener, precio_catalogo
 
 
 def listar_insumos(texto_busqueda="", ciudad="", incluir_inactivos=False):
@@ -105,6 +105,23 @@ def actualizar_insumo(id_insumo, datos):
             {"n": nombre, "u": unidad, "c": costo, "i": id_insumo},
         )
         return obtener(connection, "INSUMOS", "id_insumo", id_insumo)
+
+
+def actualizar_precio_ciudad(id_insumo, ciudad, costo):
+    """Registra el precio de un insumo existente para una ciudad."""
+    if not isinstance(ciudad, str) or not ciudad.strip() or len(ciudad.strip()) > 100:
+        raise ErrorApi(400, "La ciudad no es válida")
+    ciudad = ciudad.strip()
+    precio = precio_catalogo(costo)
+    with operational_engine.begin() as connection:
+        recurso = obtener(connection, "INSUMOS", "id_insumo", id_insumo)
+        connection.execute(
+            text("INSERT INTO PRECIOS_CIUDAD (id_insumo, ciudad, costo_unitario) VALUES (:id, :ciudad, :precio) "
+                 "ON CONFLICT (id_insumo, ciudad) DO UPDATE SET costo_unitario=excluded.costo_unitario"),
+            {"id": id_insumo, "ciudad": ciudad, "precio": str(precio)},
+        )
+        recurso.update(ciudad=ciudad, origen_precio="precio_ciudad", costo_unitario=float(precio))
+        return recurso
 
 
 def eliminar_insumo(id_insumo):

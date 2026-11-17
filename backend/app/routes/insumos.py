@@ -6,6 +6,7 @@ from ..errors import ErrorApi
 from ..services.usuarios_mongo import obtener_usuario
 from ..services.insumos import (
     actualizar_insumo,
+    actualizar_precio_ciudad,
     ajustar_precios_masivamente,
     actualizar_estado_insumo,
     crear_insumo,
@@ -73,6 +74,13 @@ def actualizar_estado(id):
     _exigir_administrador()
     datos = pedir(("activo",))
     return jsonify(actualizar_estado_insumo(id, datos["activo"]))
+
+
+@bp.patch("/<int:id>/precio-ciudad")
+def precio_ciudad(id):
+    _exigir_administrador()
+    datos = pedir(("ciudad", "costo_unitario"))
+    return jsonify(actualizar_precio_ciudad(id, datos["ciudad"], datos["costo_unitario"]))
 
 
 @bp.delete("/<int:id>")

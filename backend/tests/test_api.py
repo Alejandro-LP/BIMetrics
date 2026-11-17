@@ -5,6 +5,8 @@ from io import BytesIO
 from unittest.mock import patch
 from zipfile import ZipFile
 
+import ifcopenshell
+
 # La base de pruebas va en una carpeta temporal, nunca en data/
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/prueba.db"
 
@@ -42,6 +44,61 @@ def datos(c):
 
 def test_salud(c):
     assert c.get("/api/salud").get_json() == {"estado": "ok"}
+
+
+def test_importar_cantidades_ifc_sin_generar_txt(c):
+    partida = {"codigo": "MURO-IFC", "unidad": "m2", "descripcion": "Muro de concreto", "precio_defecto": 100}
+    assert c.post("/api/partidas", json=partida).status_code == 201
+    proyecto = c.post("/api/proyectos", json={"nombre_obra": "Obra IFC"}).get_json()
+    presupuesto = c.post("/api/presupuestos", json={"id_proyecto": proyecto["id_proyecto"]}).get_json()
+    base = f"/api/presupuestos/{presupuesto['id_presupuesto']}"
+
+    modelo = ifcopenshell.file(schema="IFC4")
+    mm2 = modelo.create_entity("IfcSIUnit", UnitType="AREAUNIT", Prefix="MILLI", Name="SQUARE_METRE")
+    m2 = modelo.create_entity("IfcSIUnit", UnitType="AREAUNIT", Name="SQUARE_METRE")
+    asignacion = modelo.create_entity("IfcUnitAssignment", Units=[mm2])
+    modelo.create_entity("IfcProject", GlobalId=ifcopenshell.guid.new(), UnitsInContext=asignacion)
+    for area, unidad in [(12_500_000.0, None), (2.5, m2)]:
+        muro = modelo.create_entity("IfcWall", GlobalId=ifcopenshell.guid.new(), Name="Muro de concreto")
+        neta = modelo.create_entity("IfcQuantityArea", Name="NetSideArea", AreaValue=area, Unit=unidad)
+        bruta = modelo.create_entity("IfcQuantityArea", Name="GrossSideArea", AreaValue=20.0, Unit=m2)
+        for nombre in ("Qto_WallBaseQuantities", "BaseQuantities"):
+            conjunto = modelo.create_entity(
+                "IfcElementQuantity", GlobalId=ifcopenshell.guid.new(), Name=nombre, Quantities=[neta, bruta],
+            )
+            modelo.create_entity(
+                "IfcRelDefinesByProperties", GlobalId=ifcopenshell.guid.new(),
+                RelatedObjects=[muro], RelatingPropertyDefinition=conjunto,
+            )
+    modelo.create_entity("IfcWall", GlobalId=ifcopenshell.guid.new(), Name="Muro sin cómputo")
+    resultado = c.post(base + "/importar-ifc/analizar", data={
+        "archivo": (BytesIO(modelo.to_string().encode()), "obra.ifc"),
+        "medida": "area_neta",
+    })
+    assert resultado.status_code == 200, resultado.get_json()
+    lectura = resultado.get_json()
+    assert lectura["elementos_omitidos"] == 1
+    assert lectura["total_filas"] == 1
+    fila = lectura["filas"][0]
+    assert fila["cantidad"] == pytest.approx(15)
+    assert fila["unidad"] == "m²"
+    assert fila["sugerencias"][0]["codigo"] == "MURO-IFC"
+    assert c.get(base).get_json()["detalle"] == []
+    agregado = c.post(base + "/partidas", json={"codigo": "MURO-IFC", "cantidad": fila["cantidad"]})
+    assert agregado.get_json()["detalle"][0]["subtotal"] == 1500
+
+
+def test_importar_tabla_pegada_respeta_decimal_con_tres_cifras(c):
+    proyecto = c.post("/api/proyectos", json={"nombre_obra": "Tabla BIM"}).get_json()
+    presupuesto = c.post("/api/presupuestos", json={"id_proyecto": proyecto["id_proyecto"]}).get_json()
+    base = f"/api/presupuestos/{presupuesto['id_presupuesto']}"
+    datos = {"software": "archicad", "texto": "Nombre\tCantidad\tUnidad\nMuro\t1,250\tm²", "separador_decimal": ","}
+    assert c.post(base + "/importar-tabla/analizar", json=datos).get_json()["filas"][0]["cantidad"] == 1.25
+    datos["texto"] = "Nombre\tCantidad\tUnidad\nMuro\t1.200,25 m2\tm²"
+    assert c.post(base + "/importar-tabla/analizar", json=datos).get_json()["filas"][0]["cantidad"] == 1200.25
+    assert c.post(base + "/importar-ifc/analizar", data={
+        "archivo": (BytesIO(b"texto sin IFC"), "obra.ifc"), "medida": "longitud",
+    }).status_code == 400
 
 
 def test_invitaciones_para_cualquier_perfil_y_panel_admin(c):
@@ -270,6 +327,81 @@ def test_catalogo_maestro_crud_restringido_a_admin(c):
     })
     assert usuario.status_code == 201
     assert cliente.post("/api/partidas", json=datos).status_code == 403
+
+
+def test_gestion_administrativa_de_roles_y_eliminacion(c):
+    administrador = c.get("/api/auth/sesion").get_json()
+    propia = f"/api/usuarios/{administrador['id_usuario']}"
+    assert c.delete(propia).status_code == 409
+    assert c.put(propia, json={**administrador, "rol": "cliente"}).status_code == 409
+
+    datos = {"nombre_completo": "Otra administradora", "email": "otra.admin@pruebas.local",
+             "password": "ClaveSegura123!", "rol": "administrador"}
+    creado = c.post("/api/usuarios", json=datos)
+    assert creado.status_code == 201
+    ruta = f"/api/usuarios/{creado.get_json()['id_usuario']}"
+    otra = c.application.test_client()
+    otra.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
+    login = {"email": datos["email"], "password": datos["password"]}
+    assert otra.post("/api/auth/login", json=login).status_code == 200
+    assert otra.get("/api/usuarios").status_code == 200
+    assert c.put(ruta, json={**datos, "password": "", "rol": "ingeniero"}).status_code == 200
+    assert otra.get("/api/auth/sesion").status_code == 401
+    assert otra.post("/api/auth/login", json=login).status_code == 200
+    assert otra.get("/api/usuarios").status_code == 403
+    assert c.delete(ruta).status_code == 204
+    assert otra.get("/api/auth/sesion").status_code == 401
+    assert c.get(ruta).status_code == 404
+
+
+def test_admin_no_elimina_al_propietario_de_otra_obra(c):
+    datos = {"nombre_completo": "Propietario", "email": "propietario@pruebas.local",
+             "password": "ClaveSegura123!", "rol": "ingeniero"}
+    propietario = c.post("/api/usuarios", json=datos).get_json()
+    otro = c.application.test_client()
+    otro.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
+    assert otro.post("/api/auth/login", json={"email": datos["email"], "password": datos["password"]}).status_code == 200
+    assert otro.post("/api/proyectos", json={"nombre_obra": "Obra en curso"}).status_code == 201
+    assert c.delete(f"/api/usuarios/{propietario['id_usuario']}").status_code == 409
+    assert otro.get("/api/proyectos").get_json()[0]["nombre_obra"] == "Obra en curso"
+
+
+def test_actualizar_precio_conserva_variaciones_y_presupuestos(c):
+    datos = {"codigo": "PRECIO-QA", "unidad": "m", "descripcion": "Tubería QA", "precio_defecto": 100,
+             "variaciones": [{"tipo": "material", "opcion": "PVC", "precio": 120}]}
+    assert c.post("/api/partidas", json=datos).status_code == 201
+    proyecto = c.post("/api/proyectos", json={"nombre_obra": "Obra QA"}).get_json()
+    presupuesto = c.post("/api/presupuestos", json={"id_proyecto": proyecto["id_proyecto"]}).get_json()
+    ruta = f"/api/presupuestos/{presupuesto['id_presupuesto']}"
+    assert c.post(ruta + "/partidas", json={"codigo": datos["codigo"], "cantidad": 2}).status_code == 201
+
+    precio = "/api/partidas/PRECIO-QA/precio"
+    for invalido in ("-1", "NaN", "123.123", "1000000000000"):
+        assert c.patch(precio, json={"precio_defecto": invalido}).status_code == 400
+    assert c.patch(precio, json={"precio_defecto": "150.25"}).get_json()["precio_defecto"] == 150.25
+    guardada = c.get("/api/partidas/PRECIO-QA").get_json()
+    assert guardada["descripcion"] == datos["descripcion"]
+    assert guardada["variaciones"][0]["precio"] == 120
+    anterior = c.get(ruta).get_json()["detalle"][0]
+    assert anterior["costo_unitario_aplicado"] == 100
+    precio_ciudad = f"/api/insumos/{anterior['id_insumo']}/precio-ciudad"
+    assert c.patch(precio_ciudad, json={"ciudad": "Bogotá", "costo_unitario": "180.25"}).status_code == 200
+    assert c.post(ruta + "/partidas", json={"codigo": datos["codigo"], "cantidad": 2}).status_code == 201
+    assert [item["costo_unitario_aplicado"] for item in c.get(ruta).get_json()["detalle"]] == [100, 180.25]
+
+    proyecto_nuevo = c.post("/api/proyectos", json={"nombre_obra": "Obra en Medellín", "ciudad": "Medellín"}).get_json()
+    nuevo = c.post("/api/presupuestos", json={"id_proyecto": proyecto_nuevo["id_proyecto"]}).get_json()
+    incorporacion = c.post(f"/api/presupuestos/{nuevo['id_presupuesto']}/partidas", json={"codigo": datos["codigo"], "cantidad": 1})
+    assert incorporacion.get_json()["detalle"][0]["costo_unitario_aplicado"] == 150.25
+
+    otro = c.application.test_client()
+    otro.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
+    assert otro.post("/api/auth/registro", json={
+        "nombre_completo": "Profesional", "email": "precio@pruebas.local", "rol": "ingeniero",
+        "password": "ClaveSegura123!", "autoriza_datos": True,
+    }).status_code == 201
+    assert otro.patch(precio, json={"precio_defecto": "2"}).status_code == 403
+    assert otro.patch(precio_ciudad, json={"ciudad": "Bogotá", "costo_unitario": "2"}).status_code == 403
 
 
 def test_sql_no_disponible_responde_json_503(c):

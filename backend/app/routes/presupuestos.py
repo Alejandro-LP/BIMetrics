@@ -19,7 +19,8 @@ from ..services.presupuestos_api import (
     obtener_presupuesto,
     quitar_linea_presupuesto,
 )
-from ..services.importacion_txt_bim import leer_txt_bim
+from ..services.importacion_ifc_bim import MAX_IFC_BYTES, leer_ifc_bim
+from ..services.importacion_txt_bim import leer_tabla_bim, leer_txt_bim
 from ..utils import pedir
 
 bp = Blueprint("presupuestos", __name__, url_prefix="/api/presupuestos")
@@ -192,6 +193,28 @@ def analizar_txt_bim(id):
     if not archivo or not archivo.filename or not archivo.filename.lower().endswith(".txt"):
         raise ErrorApi(400, "Selecciona un archivo .txt exportado desde Revit o Archicad")
     return jsonify(leer_txt_bim(archivo.read(5 * 1024 * 1024 + 1), software))
+
+
+@bp.post("/<int:id>/importar-tabla/analizar")
+def analizar_tabla_bim(id):
+    """Analiza las columnas pegadas desde un listado BIM."""
+    obtener_presupuesto(id, _usuario_actual())
+    datos = pedir(("texto", "software"))
+    decimal = datos.get("separador_decimal", ",")
+    if decimal not in (",", "."):
+        raise ErrorApi(400, "Selecciona coma o punto como separador decimal")
+    return jsonify(leer_tabla_bim(datos["texto"], datos["software"], separador_decimal=decimal))
+
+
+@bp.post("/<int:id>/importar-ifc/analizar")
+def analizar_ifc_bim(id):
+    """Prepara una vista previa de las cantidades del modelo exportado."""
+    obtener_presupuesto(id, _usuario_actual())
+    request.max_content_length = MAX_IFC_BYTES + 1024 * 1024
+    archivo = request.files.get("archivo")
+    if not archivo or not archivo.filename or not archivo.filename.lower().endswith(".ifc"):
+        raise ErrorApi(400, "Selecciona un archivo .ifc")
+    return jsonify(leer_ifc_bim(archivo.read(MAX_IFC_BYTES + 1), request.form.get("medida", "")))
 
 
 @bp.post("/<int:id>/mano-obra-asociada")

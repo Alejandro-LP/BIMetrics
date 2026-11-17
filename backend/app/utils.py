@@ -1,5 +1,5 @@
 """Utilidades compartidas por las rutas."""
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from math import isfinite
 
 from flask import request
@@ -43,6 +43,17 @@ def numero(valor, campo, minimo=0, estricto=False):
     if n < minimo or (estricto and n == minimo):
         raise ErrorApi(400, f"'{campo}' debe ser {'mayor que' if estricto else 'al menos'} {minimo}")
     return n
+
+
+def precio_catalogo(valor):
+    """Valida un precio compatible con las columnas monetarias del catálogo."""
+    try:
+        precio = Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError) as error:
+        raise ErrorApi(400, "Ingresa un precio válido") from error
+    if not precio.is_finite() or not 0 <= precio < 10**12 or precio != precio.quantize(Decimal("0.01")):
+        raise ErrorApi(400, "Ingresa un precio no negativo con hasta dos decimales y menos de un billón de pesos")
+    return precio
 
 
 def obtener(con, tabla, col, valor):

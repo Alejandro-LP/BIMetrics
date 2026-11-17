@@ -46,6 +46,8 @@ def _decodificar(contenido):
 
 def _delimitador(lineas):
     muestra = [linea for linea in lineas[:25] if linea.strip()]
+    if any("\t" in linea for linea in muestra):
+        return "\t"
     puntuaciones = {"\t": 0, ";": 0, "|": 0, ",": 0}
     for linea in muestra:
         for delimitador in puntuaciones:
@@ -62,8 +64,23 @@ def _indice_encabezado(celdas, alias):
     )
 
 
-def _cantidad(valor):
-    texto = re.sub(r"[^0-9,().+\-]", "", str(valor or "").strip())
+def _cantidad(valor, separador_decimal=None):
+    texto = str(valor or "").strip()
+    if separador_decimal:
+        agrupador = "." if separador_decimal == "," else ","
+        decimal = re.escape(separador_decimal)
+        miles = re.escape(agrupador)
+        numero = re.fullmatch(
+            rf"\+?((?:[0-9]{{1,3}}(?:{miles}[0-9]{{3}})+|[0-9]+)(?:{decimal}[0-9]+)?)"
+            r"(?:\s*[A-Za-zµ°][\w²³°/ .-]*)?",
+            texto,
+        )
+        if not numero:
+            return None
+        cantidad = float(numero[1].replace(agrupador, "").replace(separador_decimal, "."))
+        return cantidad if math.isfinite(cantidad) and cantidad > 0 else None
+
+    texto = re.sub(r"[^0-9,().+\-]", "", texto)
     if not texto or texto in {"-", "+", ".", ","}:
         return None
     negativo = texto.startswith("(") and texto.endswith(")")
@@ -87,14 +104,15 @@ def _cantidad(valor):
         resultado = -resultado
     if not resultado.is_finite() or resultado <= 0:
         return None
-    return float(resultado)
+    cantidad = float(resultado)
+    return cantidad if math.isfinite(cantidad) else None
 
 
-def _sugerir_partidas(nombre, codigo=None):
+def sugerir_partidas(nombre, codigo=None, unidad=None):
     """Devuelve candidatos, sin convertir coincidencias difusas en precios."""
     if codigo:
         exacta = db.session.get(Partida, codigo.strip())
-        if exacta:
+        if exacta and (not unidad or _normalizar(exacta.unidad) == _normalizar(unidad)):
             return [_serializar_candidato(exacta)]
 
     tokens = [token for token in _normalizar(nombre).split() if len(token) >= 4 and token not in STOPWORDS]
@@ -114,7 +132,8 @@ def _sugerir_partidas(nombre, codigo=None):
         similitud = SequenceMatcher(None, consulta_norm, descripcion).ratio()
         return cobertura * 0.75 + similitud * 0.25
 
-    mejores = sorted(candidatos, key=puntuacion, reverse=True)[:3]
+    compatibles = (item for item in candidatos if not unidad or _normalizar(item.unidad) == _normalizar(unidad))
+    mejores = sorted(compatibles, key=puntuacion, reverse=True)[:3]
     return [_serializar_candidato(item) for item in mejores if puntuacion(item) >= 0.12]
 
 
@@ -133,16 +152,27 @@ def leer_txt_bim(contenido, software):
         raise ErrorApi(400, "El archivo TXT está vacío")
     if len(contenido) > 5 * 1024 * 1024:
         raise ErrorApi(413, "El archivo TXT supera el máximo permitido de 5 MB")
-    if software not in {"revit", "archicad"}:
+    return leer_tabla_bim(_decodificar(contenido), software)
+
+
+def leer_tabla_bim(texto, software, separador_decimal=None):
+    if software not in ("revit", "archicad"):
         raise ErrorApi(400, "software debe ser revit o archicad")
 
-    texto = _decodificar(contenido).replace("\x00", "")
+    if not isinstance(texto, str) or not texto.strip():
+        raise ErrorApi(400, "Pega una tabla con nombres y cantidades")
+    if separador_decimal and len(texto.encode("utf-8")) > 5 * 1024 * 1024:
+        raise ErrorApi(413, "La tabla supera el máximo permitido de 5 MB")
+    texto = texto.replace("\x00", "")
     lineas = texto.splitlines()
     delimitador = _delimitador(lineas)
     if not delimitador or max((linea.count(delimitador) for linea in lineas[:25]), default=0) == 0:
-        raise ErrorApi(400, "No se detectó una tabla delimitada. Exporta la planificación de Revit o Archicad como texto tabulado.")
+        raise ErrorApi(400, "No se detectaron columnas. Copia varias celdas con sus encabezados o usa el formato IFC.")
 
-    filas = list(csv.reader(lineas, delimiter=delimitador, quotechar='"'))
+    try:
+        filas = list(csv.reader(lineas, delimiter=delimitador, quotechar='"'))
+    except csv.Error as error:
+        raise ErrorApi(400, "No se pudo leer una celda. Revisa el tamaño y las comillas del listado.") from error
     encabezado = None
     indices = None
     for indice_fila, fila in enumerate(filas[:40]):
@@ -172,7 +202,7 @@ def leer_txt_bim(contenido, software):
             indices = (nombre_idx, cantidad_idx, unidad_idx, codigo_idx, unidad_medida)
             break
     if encabezado is None:
-        raise ErrorApi(400, "No encontré encabezados de elemento y cantidad. Exporta una tabla con columnas Nombre/Description y Cantidad/Quantity o Count.")
+        raise ErrorApi(400, "La primera fila debe identificar el elemento y la medida. Usa, por ejemplo, Nombre, Cantidad y Unidad.")
 
     nombre_idx, cantidad_idx, unidad_idx, codigo_idx, unidad_medida_default = indices
     resultado = []
@@ -182,7 +212,7 @@ def leer_txt_bim(contenido, software):
         nombre = str(fila[nombre_idx]).strip()
         if not nombre or _normalizar(nombre) in {"total", "subtotal", "grand total", "total general"}:
             continue
-        cantidad = _cantidad(fila[cantidad_idx])
+        cantidad = _cantidad(fila[cantidad_idx], separador_decimal)
         if cantidad is None:
             continue
         unidad = str(fila[unidad_idx]).strip() if unidad_idx is not None and unidad_idx < len(fila) else ""
@@ -197,10 +227,10 @@ def leer_txt_bim(contenido, software):
             "codigo_origen": codigo,
             "cantidad": cantidad,
             "unidad": unidad[:50],
-            "sugerencias": _sugerir_partidas(nombre, codigo),
+            "sugerencias": sugerir_partidas(nombre, codigo),
         })
         if len(resultado) > MAX_FILAS:
-            raise ErrorApi(413, f"El TXT supera el máximo de {MAX_FILAS} filas de elementos por importación")
+            raise ErrorApi(413, f"La tabla supera el máximo de {MAX_FILAS} filas de elementos por importación")
 
     if not resultado:
         raise ErrorApi(400, "La tabla se leyó, pero no contiene filas con cantidades positivas reconocibles")
@@ -210,5 +240,5 @@ def leer_txt_bim(contenido, software):
         "encabezados": [str(celda).strip() for celda in filas[encabezado]],
         "total_filas": len(resultado),
         "filas": resultado,
-        "aviso_precios": "Los precios del TXT se ignoran. Al agregar una fila se toma el precio vigente del catálogo SQL.",
+        "aviso_precios": "Al agregar una fila se toma el precio vigente del catálogo SQL.",
     }
