@@ -9,7 +9,7 @@ const navigation = [
   { label: 'Actividad BIM', href: '#activities' },
 ]
 
-function DashboardLayout({ children, user, onLogout }) {
+function DashboardLayout({ children, user, onLogout, administration = false }) {
   const [activeItem, setActiveItem] = useState('Resumen general')
   const displayName = user?.nombre_completo || 'BIMetrics'
 
@@ -24,7 +24,9 @@ function DashboardLayout({ children, user, onLogout }) {
           Espacio de trabajo
         </p>
         <nav aria-label="Navegación principal" className="grid grid-cols-2 gap-1 lg:grid-cols-1">
-          {navigation.map(({ label, href }) => {
+          {administration ? (
+            <Link to="/dashboard" className="rounded-xl px-3 py-2.5 text-sm text-indigo-200 hover:bg-indigo-400/10">Volver al espacio de trabajo</Link>
+          ) : navigation.map(({ label, href }) => {
             const active = activeItem === label
             return (
               <a
@@ -42,6 +44,15 @@ function DashboardLayout({ children, user, onLogout }) {
               </a>
             )
           })}
+          {user?.rol === 'administrador' && (
+            <Link
+              to="/administracion"
+              aria-current={administration ? 'page' : undefined}
+              className="rounded-xl px-3 py-2.5 text-sm font-medium text-cyan-200 transition hover:bg-cyan-400/10 aria-[current=page]:bg-cyan-400/10"
+            >
+              Administración
+            </Link>
+          )}
         </nav>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] px-2 pt-4 lg:mt-auto">

@@ -4,12 +4,40 @@ from pymongo.errors import PyMongoError
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from ..config import ROLES
 from ..database import operational_engine
 from ..extensions import db
 from ..catalog_models import Partida, VariacionOpcion
 from ..errors import ErrorApi
-from .usuarios_mongo import obtener_usuario
-from .actividades_bim import listar_actividades_bim
+from .usuarios_mongo import contar_usuarios_por_rol, obtener_usuario
+from .actividades_bim import ESTADOS_VALIDOS, contar_actividades_por_estado, listar_actividades_bim
+
+
+def obtener_resumen_admin(id_usuario):
+    """Devuelve estadísticas agregadas de la plataforma para administración."""
+    usuario = obtener_usuario(id_usuario)
+    if not usuario or usuario["rol"] != "administrador":
+        raise ErrorApi(403, "Solo un administrador puede consultar estas estadísticas")
+
+    with operational_engine.connect() as connection:
+        operacion = dict(connection.execute(text(
+            "SELECT (SELECT COUNT(*) FROM PROYECTOS) AS proyectos, "
+            "(SELECT COUNT(DISTINCT id_proyecto) FROM PROYECTO_COLABORADORES) AS proyectos_compartidos, "
+            "(SELECT COUNT(*) FROM PRESUPUESTOS) AS presupuestos"
+        )).mappings().one())
+
+    cuentas = contar_usuarios_por_rol()
+    actividades = None
+    try:
+        estados = contar_actividades_por_estado()
+        actividades = {estado: estados.get(estado, 0) for estado in sorted(ESTADOS_VALIDOS)}
+    except PyMongoError:
+        pass
+    return {
+        **operacion,
+        "cuentas_por_rol": {rol: cuentas.get(rol, 0) for rol in sorted(ROLES)},
+        "actividades_por_estado": actividades,
+    }
 
 
 def obtener_resumen(id_usuario):

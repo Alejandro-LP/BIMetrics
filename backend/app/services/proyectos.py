@@ -2,10 +2,12 @@
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
+from ..config import ROLES
 from ..database import operational_engine
 from ..errors import ErrorApi
 from ..utils import filas, obtener
@@ -81,7 +83,7 @@ def obtener_historial_proyecto(id_proyecto, id_usuario, cliente="", desde=None, 
 
 
 def invitar_colaborador(id_proyecto, id_propietario, email):
-    """Agrega a un profesional al proyecto, solo por solicitud del propietario."""
+    """Agrega una cuenta registrada al proyecto por solicitud del propietario."""
     email = email.strip().lower() if isinstance(email, str) else ""
     if not email:
         raise ErrorApi(400, "Escribe el correo de la persona colaboradora")
@@ -95,8 +97,8 @@ def invitar_colaborador(id_proyecto, id_propietario, email):
         usuario = obtener_usuario_por_email(email)
         if not usuario:
             raise ErrorApi(404, "No hay una cuenta registrada con ese correo")
-        if usuario["rol"] not in ("arquitecto", "ingeniero"):
-            raise ErrorApi(400, "Solo se puede invitar a un arquitecto o ingeniero")
+        if usuario["rol"] not in ROLES:
+            raise ErrorApi(400, "La cuenta no tiene un rol válido")
         if usuario["id_usuario"] == id_propietario:
             raise ErrorApi(400, "Ya eres propietario de este proyecto")
 
@@ -112,12 +114,12 @@ def invitar_colaborador(id_proyecto, id_propietario, email):
             )
 
 
-def crear_codigo_invitacion(id_proyecto, id_propietario, rol):
-    """Genera un código aleatorio, ligado a rol y proyecto, válido por siete días."""
-    if rol not in ("arquitecto", "ingeniero", "cliente"):
-        raise ErrorApi(400, "El código debe asignarse a un arquitecto, ingeniero o cliente")
+def crear_codigo_invitacion(id_proyecto, id_propietario, rol="cualquiera"):
+    """Genera un código de siete días con un filtro de rol opcional."""
+    if not isinstance(rol, str) or (rol != "cualquiera" and rol not in ROLES):
+        raise ErrorApi(400, "Selecciona un rol válido o permite cualquier perfil")
     codigo = secrets.token_urlsafe(24)
-    ahora = datetime.utcnow()
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
     expira = ahora + timedelta(days=7)
     with operational_engine.begin() as connection:
         proyecto = connection.execute(
@@ -149,32 +151,42 @@ def aceptar_codigo_invitacion(id_usuario, codigo):
     if not isinstance(codigo, str) or not 20 <= len(codigo.strip()) <= 100:
         raise ErrorApi(400, "El código no es válido o ya expiró")
     codigo_hash = hashlib.sha256(codigo.strip().encode("utf-8")).hexdigest()
-    ahora = datetime.utcnow()
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    try:
+        return _canjear_invitacion(id_usuario, codigo_hash, ahora)
+    except IntegrityError as error:
+        raise ErrorApi(409, "El acceso al proyecto ya se registró. Intenta abrirlo de nuevo.") from error
+
+
+def _canjear_invitacion(id_usuario, codigo_hash, ahora):
     with operational_engine.begin() as connection:
         invitacion = connection.execute(
             text(
-                "SELECT id_invitacion, id_proyecto, rol, expira_en, aceptado_en "
-                "FROM PROYECTO_INVITACIONES WHERE codigo_hash=:hash"
+                "SELECT i.id_invitacion, i.id_proyecto, i.rol, i.aceptado_por, p.id_usuario, p.nombre_obra "
+                "FROM PROYECTO_INVITACIONES i JOIN PROYECTOS p ON p.id_proyecto=i.id_proyecto "
+                "WHERE i.codigo_hash=:hash AND ("
+                "(i.aceptado_en IS NULL AND i.expira_en>:ahora) OR i.aceptado_por=:usuario)"
             ),
-            {"hash": codigo_hash},
+            {"hash": codigo_hash, "ahora": ahora, "usuario": id_usuario},
         ).mappings().first()
-        if not invitacion or invitacion["aceptado_en"] is not None or invitacion["expira_en"] <= ahora:
+        if not invitacion:
             raise ErrorApi(400, "El código no es válido o ya expiró")
         perfil = obtener_usuario(id_usuario)
-        if not perfil or perfil["rol"] != invitacion["rol"]:
-            raise ErrorApi(403, "Este código fue creado para otro tipo de cuenta")
-        propietario = connection.execute(
-            text("SELECT id_usuario FROM PROYECTOS WHERE id_proyecto=:proyecto"),
-            {"proyecto": invitacion["id_proyecto"]},
-        ).scalar()
-        if id_usuario == propietario:
+        if not perfil or perfil["rol"] not in ROLES:
+            raise ErrorApi(403, "Tu cuenta no tiene un rol válido")
+        if id_usuario == invitacion["id_usuario"]:
             raise ErrorApi(400, "Ya eres propietario de este proyecto")
+        proyecto = {campo: invitacion[campo] for campo in ("id_proyecto", "nombre_obra")}
         existente = connection.execute(
             text("SELECT 1 FROM PROYECTO_COLABORADORES WHERE id_proyecto=:proyecto AND id_usuario=:usuario"),
             {"proyecto": invitacion["id_proyecto"], "usuario": id_usuario},
         ).first()
         if existente:
-            raise ErrorApi(409, "Ya tienes acceso a este proyecto")
+            return proyecto
+        if invitacion["aceptado_por"] is not None:
+            raise ErrorApi(400, "Solicita una invitación nueva para recuperar el acceso")
+        if invitacion["rol"] not in ("cualquiera", perfil["rol"]):
+            raise ErrorApi(403, "Este código fue emitido para otro rol. Pide un código para cualquier perfil.")
         reserva = connection.execute(
             text(
                 "UPDATE PROYECTO_INVITACIONES SET aceptado_por=:usuario, aceptado_en=:ahora "
@@ -191,11 +203,7 @@ def aceptar_codigo_invitacion(id_usuario, codigo):
             ),
             {"usuario": id_usuario, "id": invitacion["id_invitacion"]},
         )
-        proyecto = connection.execute(
-            text("SELECT id_proyecto, nombre_obra FROM PROYECTOS WHERE id_proyecto=:proyecto"),
-            {"proyecto": invitacion["id_proyecto"]},
-        ).mappings().first()
-    return dict(proyecto)
+    return proyecto
 
 
 def eliminar_proyecto(id_proyecto, id_propietario):

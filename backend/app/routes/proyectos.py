@@ -71,14 +71,14 @@ def invitar(id):
 
 @bp.post("/<int:id>/invitaciones")
 def crear_invitacion(id):
-    """Crea un código de un solo uso para arquitecto, ingeniero o cliente."""
-    datos = pedir(("rol",))
-    return jsonify(crear_codigo_invitacion(id, _usuario_actual(), datos["rol"])), 201
+    """Crea un código de un solo uso con un filtro de rol opcional."""
+    datos = pedir(())
+    return jsonify(crear_codigo_invitacion(id, _usuario_actual(), datos.get("rol", "cualquiera"))), 201
 
 
 @bp.post("/invitaciones/aceptar")
 def aceptar_invitacion():
-    """Canjea un código cuyo rol debe coincidir con el de la cuenta actual."""
+    """Canjea un código sin cambiar el rol de la cuenta."""
     datos = pedir(("codigo",))
     proyecto = aceptar_codigo_invitacion(_usuario_actual(), datos["codigo"])
     return jsonify(ok=True, mensaje="Te uniste al proyecto.", proyecto=proyecto), 200

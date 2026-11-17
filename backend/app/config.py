@@ -53,6 +53,7 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USERNAME)
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "1").strip().lower() in {"1", "true", "yes"}
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", str(SMTP_PORT == 465)).strip().lower() in {"1", "true", "yes"}
 PASSWORD_RESET_DEBUG = os.getenv("PASSWORD_RESET_DEBUG", "0").strip() == "1"
 
 # Configuración NoSQL (MongoDB) para telemetría, logs BIM e importaciones

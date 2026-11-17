@@ -151,6 +151,15 @@ paths:
         '200': { description: "Resumen de partidas, variaciones, métricas operativas y actividad BIM" }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /dashboard/administracion:
+    get:
+      tags: [Dashboard]
+      summary: Consulta estadísticas globales con una cuenta administradora
+      responses:
+        '200': { description: Conteos de proyectos, proyectos compartidos, presupuestos, cuentas por rol y actividad BIM por estado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /proyectos:
     get:
       tags: [Proyectos]
@@ -842,6 +851,7 @@ paths:
         '200': { description: Solicitud procesada }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /auth/restablecer-password:
     post:
       tags: [Autenticación]
@@ -866,7 +876,7 @@ paths:
   /proyectos/{id}/invitaciones:
     post:
       tags: [Proyectos]
-      summary: El propietario crea un código de un uso para un rol específico
+      summary: El propietario crea un código de un uso con filtro de rol opcional
       parameters:
         - $ref: '#/components/parameters/Origin'
         - $ref: '#/components/parameters/Id'
@@ -876,9 +886,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [rol]
               properties:
-                rol: { type: string, enum: [arquitecto, ingeniero, cliente] }
+                rol: { type: string, enum: [cualquiera, arquitecto, ingeniero, cliente, administrador], default: cualquiera }
       responses:
         '201': { description: Invitación creada }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -888,7 +897,7 @@ paths:
   /proyectos/invitaciones/aceptar:
     post:
       tags: [Proyectos]
-      summary: Canjea un código de invitación compatible con el rol de la cuenta
+      summary: Canjea un código de invitación y conserva el rol de la cuenta
       parameters:
         - $ref: '#/components/parameters/Origin'
       requestBody:

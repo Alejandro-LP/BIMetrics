@@ -1,6 +1,6 @@
 """Repositorio MongoDB para identidades, credenciales y perfiles de usuario."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pymongo import ASCENDING, ReturnDocument
 from pymongo.errors import PyMongoError
@@ -24,6 +24,7 @@ def asegurar_indices_usuarios():
         coleccion = _coleccion()
         coleccion.create_index([("id_usuario", ASCENDING)], unique=True, name="uq_usuario_id")
         coleccion.create_index([("email", ASCENDING)], unique=True, name="uq_usuario_email")
+        coleccion.create_index("restablecimiento.token_hash", sparse=True, name="idx_reset_token_usuario")
         restablecimientos = get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS]
         restablecimientos.create_index([("id_usuario", ASCENDING)], unique=True, name="uq_reset_usuario")
         restablecimientos.create_index([("expira_en", ASCENDING)], expireAfterSeconds=0, name="ttl_reset_expiracion")
@@ -86,6 +87,12 @@ def obtener_usuarios(id_usuarios):
     return {documento["id_usuario"]: _publico(documento) for documento in cursor}
 
 
+def contar_usuarios_por_rol():
+    """Cuenta las cuentas por perfil sin cargar datos personales."""
+    grupos = _coleccion().aggregate([{"$group": {"_id": "$rol", "total": {"$sum": 1}}}])
+    return {grupo["_id"]: grupo["total"] for grupo in grupos}
+
+
 def obtener_documento_usuario(id_usuario):
     """Obtiene el documento interno para verificar credenciales y permisos."""
     return _coleccion().find_one({"id_usuario": int(id_usuario)})
@@ -96,43 +103,68 @@ def obtener_version_sesion(id_usuario):
     return int(documento.get("version_sesion", 1)) if documento else None
 
 
-def obtener_restablecimiento_usuario(id_usuario):
-    return get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].find_one({"id_usuario": int(id_usuario)})
-
-
-def guardar_restablecimiento(id_usuario, token_hash, creado_en, expira_en):
-    get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].update_one(
-        {"id_usuario": int(id_usuario)},
-        {"$set": {
+def guardar_restablecimiento(usuario, token_hash, creado_en, expira_en):
+    """Emite como máximo un enlace por minuto y cuenta."""
+    return _coleccion().update_one(
+        {
+            "_id": usuario["_id"],
+            "email": usuario["email"],
+            "fecha_actualizacion": usuario.get("fecha_actualizacion"),
+            "$or": [
+                {"restablecimiento.creado_en": {"$exists": False}},
+                {"restablecimiento.creado_en": {"$lte": creado_en - timedelta(minutes=1)}},
+            ],
+        },
+        {"$set": {"restablecimiento": {
             "token_hash": token_hash,
             "creado_en": creado_en,
             "expira_en": expira_en,
-            "usado_en": None,
-        }},
-        upsert=True,
-    )
+        }}},
+    ).matched_count == 1
 
 
 def eliminar_restablecimiento(id_usuario, token_hash):
     """Retira el token si no se pudo entregar por correo."""
-    get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].delete_one(
-        {"id_usuario": int(id_usuario), "token_hash": token_hash}
+    _coleccion().update_one(
+        {"id_usuario": int(id_usuario), "restablecimiento.token_hash": token_hash},
+        {"$unset": {"restablecimiento": ""}},
     )
 
 
-def consumir_restablecimiento(token_hash, ahora):
-    return get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].find_one_and_update(
+def buscar_usuario_para_restablecer(token_hash, ahora):
+    """Localiza el enlace vigente. Los enlaces previos al cambio conservan su vigencia."""
+    filtro = {"restablecimiento.token_hash": token_hash, "restablecimiento.expira_en": {"$gt": ahora}}
+    datos_sesion = {"version_sesion": 1}
+    usuario = _coleccion().find_one(filtro, datos_sesion)
+    if usuario:
+        return usuario, filtro
+    anterior = get_mongo_db("users")[COLECCION_RESTABLECIMIENTOS].find_one(
         {"token_hash": token_hash, "expira_en": {"$gt": ahora}, "usado_en": None},
-        {"$set": {"usado_en": ahora}},
-        return_document=ReturnDocument.BEFORE,
     )
+    if not anterior:
+        return None, None
+    filtro = {
+        "id_usuario": anterior["id_usuario"],
+        "restablecimiento": {"$exists": False},
+        "fecha_actualizacion": {"$lte": anterior["creado_en"]},
+        "$or": [
+            {"ultimo_restablecimiento": {"$exists": False}},
+            {"ultimo_restablecimiento": {"$lt": anterior["creado_en"]}},
+        ],
+    }
+    return _coleccion().find_one(filtro, datos_sesion), filtro
 
 
-def actualizar_password_restablecida(id_usuario, password_hash, ahora):
+def actualizar_password_restablecida(usuario, filtro, password_hash, ahora):
+    """Canjea el enlace, reemplaza el hash e invalida las sesiones en la misma escritura."""
     return _coleccion().update_one(
-        {"id_usuario": int(id_usuario)},
-        {"$set": {"password_hash": password_hash, "fecha_actualizacion": ahora},
-         "$inc": {"version_sesion": 1}},
+        {**filtro, "_id": usuario["_id"], "version_sesion": usuario.get("version_sesion")},
+        {"$set": {
+            "password_hash": password_hash,
+            "fecha_actualizacion": ahora,
+            "ultimo_restablecimiento": ahora,
+            "version_sesion": int(usuario.get("version_sesion", 1)) + 1,
+        }, "$unset": {"restablecimiento": ""}},
     ).matched_count == 1
 
 
@@ -159,7 +191,7 @@ def actualizar_perfil(id_usuario, nombre, email, password_hash=None):
     cambios = {"nombre_completo": nombre, "email": email, "fecha_actualizacion": datetime.now(timezone.utc)}
     if password_hash:
         cambios["password_hash"] = password_hash
-    actualizacion = {"$set": cambios}
+    actualizacion = {"$set": cambios, "$unset": {"restablecimiento": ""}}
     if password_hash:
         actualizacion["$inc"] = {"version_sesion": 1}
     resultado = _coleccion().find_one_and_update({"id_usuario": int(id_usuario)}, actualizacion, return_document=ReturnDocument.AFTER)
@@ -190,11 +222,12 @@ def crear_o_actualizar_admin(datos, id_usuario=None, password_hash=None):
             "fecha_creacion": datetime.now(timezone.utc)}
         coleccion.insert_one(documento)
         return _publico(documento)
+    actualizacion = {"$set": cambios, "$unset": {"restablecimiento": ""}}
     if password_hash:
         cambios["password_hash"] = password_hash
-        coleccion.update_one({"id_usuario": int(id_usuario)}, {"$inc": {"version_sesion": 1}})
+        actualizacion["$inc"] = {"version_sesion": 1}
     actualizado = coleccion.find_one_and_update(
-        {"id_usuario": int(id_usuario)}, {"$set": cambios}, return_document=ReturnDocument.AFTER
+        {"id_usuario": int(id_usuario)}, actualizacion, return_document=ReturnDocument.AFTER
     )
     return _publico(actualizado)
 

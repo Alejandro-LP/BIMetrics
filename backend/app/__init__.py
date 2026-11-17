@@ -20,6 +20,7 @@ from .config import (
     SMTP_PASSWORD,
     SMTP_PORT,
     SMTP_USE_TLS,
+    SMTP_USE_SSL,
     SMTP_USERNAME,
 )
 from .database import get_mongo_db, init_mongo, operational_engine
@@ -63,6 +64,7 @@ def create_app():
         SMTP_PASSWORD=SMTP_PASSWORD,
         SMTP_FROM=SMTP_FROM,
         SMTP_USE_TLS=SMTP_USE_TLS,
+        SMTP_USE_SSL=SMTP_USE_SSL,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         # Vite local runs use HTTP; deployments must set this to 1 behind HTTPS.

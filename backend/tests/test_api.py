@@ -44,6 +44,103 @@ def test_salud(c):
     assert c.get("/api/salud").get_json() == {"estado": "ok"}
 
 
+def test_invitaciones_para_cualquier_perfil_y_panel_admin(c):
+    proyecto = c.post("/api/proyectos", json={"nombre_obra": "Obra compartida"}).get_json()
+    id_proyecto = proyecto["id_proyecto"]
+    ruta = f"/api/proyectos/{id_proyecto}/invitaciones"
+    canje = "/api/proyectos/invitaciones/aceptar"
+
+    for rol in ("arquitecto", "ingeniero", "cliente", "administrador"):
+        invitado = c.application.test_client()
+        invitado.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
+        email = f"{rol}@pruebas.local"
+        if rol == "administrador":
+            assert c.post("/api/usuarios", json={
+                "nombre_completo": "Administrador invitado", "email": email, "rol": rol,
+                "password": "ClaveDePrueba123",
+            }).status_code == 201
+            assert invitado.post("/api/auth/login", json={"email": email, "password": "ClaveDePrueba123"}).status_code == 200
+        else:
+            assert invitado.post("/api/auth/registro", json={
+                "nombre_completo": "Cuenta invitada", "email": email, "rol": rol,
+                "password": "ClaveDePrueba123", "autoriza_datos": True,
+            }).status_code == 201
+
+        assert invitado.get("/api/proyectos").get_json() == []
+        if rol == "cliente":
+            restringida = c.post(ruta, json={"rol": "ingeniero"}).get_json()["codigo"]
+            assert invitado.post(canje, json={"codigo": restringida}).status_code == 403
+        creada = c.post(ruta, json={})
+        assert creada.status_code == 201
+        codigo = creada.get_json()["codigo"]
+        assert c.post(canje, json={"codigo": codigo}).status_code == 400
+        for _ in range(2):
+            assert invitado.post(canje, json={"codigo": codigo}).status_code == 200
+        assert invitado.get("/api/proyectos").get_json()[0]["id_proyecto"] == id_proyecto
+        assert invitado.get("/api/auth/sesion").get_json()["rol"] == rol
+        panel = invitado.get("/api/dashboard/administracion")
+        assert panel.status_code == (200 if rol == "administrador" else 403)
+        if rol == "cliente":
+            assert invitado.post("/api/presupuestos", json={"id_proyecto": id_proyecto}).status_code == 403
+        if rol == "administrador":
+            assert panel.get_json()["proyectos_compartidos"] == 1
+            assert panel.get_json()["cuentas_por_rol"]["administrador"] == 2
+
+
+def test_restablecimiento_local_reemplaza_password_e_invalida_sesiones(c):
+    c.application.config.update(PASSWORD_RESET_DEBUG=True, BIMETRICS_ENV="development", SMTP_HOST="")
+    recuperacion = c.application.test_client()
+    recuperacion.environ_base["HTTP_ORIGIN"] = "http://localhost:5173"
+    datos = {"email": "sesion@pruebas.local"}
+    solicitar = "/api/auth/solicitar-restablecimiento"
+    restablecer = "/api/auth/restablecer-password"
+    respuesta = recuperacion.post(solicitar, json=datos)
+    assert respuesta.status_code == 200
+    token = respuesta.get_json()["enlace_desarrollo"].split("token=")[1]
+    assert "enlace_desarrollo" not in recuperacion.post(solicitar, json=datos).get_json()
+    assert "enlace_desarrollo" not in recuperacion.post(solicitar, json={"email": "otra@pruebas.local"}).get_json()
+    assert recuperacion.post(restablecer, json={"token": token, "password": "corta"}).status_code == 400
+    nueva = {"token": token, "password": "ClaveRestablecida123!"}
+    assert recuperacion.post(restablecer, json=nueva).status_code == 200
+    assert recuperacion.post(restablecer, json=nueva).status_code == 400
+    assert c.get("/api/auth/sesion").status_code == 401
+    assert recuperacion.post("/api/auth/login", json={**datos, "password": "ClaveDePrueba123"}).status_code == 401
+    assert recuperacion.post("/api/auth/login", json={**datos, "password": nueva["password"]}).status_code == 200
+
+
+def test_restablecimiento_sin_smtp_reporta_indisponibilidad_a_todos(c):
+    c.application.config.update(PASSWORD_RESET_DEBUG=True, BIMETRICS_ENV="production", SMTP_HOST="")
+    ruta = "/api/auth/solicitar-restablecimiento"
+    registrado = c.post(ruta, json={"email": "sesion@pruebas.local"})
+    desconocido = c.post(ruta, json={"email": "otra@pruebas.local"})
+    assert registrado.status_code == desconocido.status_code == 503
+    assert registrado.get_json() == desconocido.get_json()
+
+
+@pytest.mark.parametrize("ssl_directo,puerto", [(False, 587), (True, 465)])
+def test_restablecimiento_envia_por_smtp_sin_exponer_token(c, ssl_directo, puerto):
+    c.application.config.update(
+        PASSWORD_RESET_DEBUG=True, BIMETRICS_ENV="production", APP_BASE_URL="https://bimetrics.test",
+        SMTP_HOST="smtp.bimetrics.test", SMTP_FROM="cuentas@bimetrics.test",
+        SMTP_PORT=puerto, SMTP_USE_SSL=ssl_directo, SMTP_USE_TLS=True,
+        SMTP_USERNAME="mailer", SMTP_PASSWORD="clave-de-prueba",
+    )
+    transporte = "SMTP_SSL" if ssl_directo else "SMTP"
+    with patch(f"app.services.correo.smtplib.{transporte}") as smtp:
+        resultado = c.post("/api/auth/solicitar-restablecimiento", json={"email": "sesion@pruebas.local"})
+        assert resultado.status_code == 200
+        assert "enlace_desarrollo" not in resultado.get_json()
+        conexion = smtp.return_value.__enter__.return_value
+        assert conexion.starttls.called is (not ssl_directo)
+        conexion.login.assert_called_once()
+        mensaje = conexion.send_message.call_args.args[0]
+        assert mensaje["To"] == "sesion@pruebas.local"
+        enlace = next(palabra for palabra in mensaje.get_content().split() if palabra.startswith("https://"))
+        assert enlace.startswith("https://bimetrics.test/restablecer?token=")
+    token = enlace.split("token=")[1]
+    assert c.post("/api/auth/restablecer-password", json={"token": token, "password": "NuevaClave123!"}).status_code == 200
+
+
 def test_produccion_rechaza_cookie_insegura(monkeypatch):
     monkeypatch.setenv("BIMETRICS_ENV", "production")
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "0")

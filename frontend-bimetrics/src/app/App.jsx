@@ -5,6 +5,7 @@ import { useAuth } from '../features/auth/useAuth.js'
 import { Toaster } from 'sonner'
 
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage.jsx'))
+const AdminDashboardPage = lazy(() => import('../features/dashboard/AdminDashboardPage.jsx'))
 const LandingPage = lazy(() => import('../features/public/LandingPage.jsx'))
 const LegalPage = lazy(() => import('../features/public/LegalPage.jsx'))
 const LoginPage = lazy(() => import('../features/auth/LoginPage.jsx'))
@@ -20,10 +21,12 @@ function RouteLoader() {
   )
 }
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, admin = false }) {
   const { user, isLoading } = useAuth()
   if (isLoading) return <RouteLoader />
-  return user ? children : <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
+  if (admin && user.rol !== 'administrador') return <Navigate to="/dashboard" replace />
+  return children
 }
 
 function GuestRoute({ children }) {
@@ -39,9 +42,10 @@ function AppRoutes() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<GuestRoute><LoginPage mode="login" /></GuestRoute>} />
         <Route path="/registro" element={<GuestRoute><LoginPage mode="register" /></GuestRoute>} />
-        <Route path="/recuperar" element={<PasswordResetPage />} />
-        <Route path="/restablecer" element={<PasswordResetPage />} />
+        <Route path="/recuperar" element={<PasswordResetPage key="solicitar" />} />
+        <Route path="/restablecer" element={<PasswordResetPage key="confirmar" />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/administracion" element={<ProtectedRoute admin><AdminDashboardPage /></ProtectedRoute>} />
         <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/contacto" element={<ContactPage />} />
         <Route path="/terminos" element={<LegalPage document="terms" />} />

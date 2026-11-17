@@ -53,6 +53,12 @@ def _obtener_coleccion() -> Collection:
     return db[COLECCION_ACTIVIDADES]
 
 
+def contar_actividades_por_estado():
+    """Agrupa la actividad de la plataforma sin exponer los documentos."""
+    grupos = _obtener_coleccion().aggregate([{"$group": {"_id": "$estado", "total": {"$sum": 1}}}])
+    return {grupo["_id"]: grupo["total"] for grupo in grupos}
+
+
 def asegurar_indices_bim() -> None:
     """Ensure the compound index used by the user's recent activity history."""
     try:

@@ -4,12 +4,14 @@ import { motion } from 'framer-motion'
 import GlassCard from '../../components/ui/GlassCard.jsx'
 import BrandLogo from '../../components/brand/BrandLogo.jsx'
 import { apiRequest } from '../../services/api.js'
+import { useAuth } from './useAuth.js'
 
 const inputClass = 'glass-control mt-2 w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-indigo-300/50 focus:ring-2 focus:ring-indigo-400/15'
 
 function PasswordResetPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { updateUser } = useAuth()
   const token = searchParams.get('token') || ''
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,12 +20,14 @@ function PasswordResetPage() {
   const [developmentLink, setDevelopmentLink] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showPasswords, setShowPasswords] = useState(false)
 
   async function submit(event) {
     event.preventDefault()
     setBusy(true)
     setError('')
     setMessage('')
+    setDevelopmentLink('')
     try {
       if (!token) {
         const result = await apiRequest('/auth/solicitar-restablecimiento', {
@@ -36,6 +40,7 @@ function PasswordResetPage() {
         await apiRequest('/auth/restablecer-password', {
           method: 'POST', body: JSON.stringify({ token, password }),
         })
+        updateUser(null)
         navigate('/login?restablecida=1', { replace: true })
       }
     } catch (submitError) {
@@ -54,14 +59,20 @@ function PasswordResetPage() {
           <h1 className="text-lg font-semibold text-white">{token ? 'Crea una contraseña nueva' : 'Restablece tu contraseña'}</h1>
           <p className="mt-1 text-xs leading-5 text-slate-400">{token ? 'Usa una contraseña de 10 a 128 caracteres.' : 'Te enviaremos un enlace de un solo uso que vence en 30 minutos.'}</p>
           {(error || message) && <p role={error ? 'alert' : 'status'} className={`mt-5 rounded-xl border px-3.5 py-3 text-sm ${error ? 'border-rose-400/20 bg-rose-400/[0.07] text-rose-200' : 'border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-100'}`}>{error || message}</p>}
-          {developmentLink && <a href={developmentLink} className="mt-3 block break-all rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3.5 py-3 text-xs text-amber-100">Abrir enlace local de restablecimiento</a>}
-          {!message || token ? <form onSubmit={submit} className="mt-5 space-y-4">
+          {developmentLink && <Link to={{ pathname: '/restablecer', search: new URL(developmentLink).search }} className="mt-3 block rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3.5 py-3 text-xs text-amber-100">Abrir enlace local de restablecimiento</Link>}
+          {message && !developmentLink && <div className="mt-4 space-y-3 text-sm text-slate-400">
+            <p>Revisa la bandeja de correo no deseado. Puedes solicitar otro enlace después de un minuto.</p>
+            <button type="button" onClick={() => setMessage('')} className="font-medium text-indigo-300 hover:text-indigo-200">Cambiar correo o volver a intentar</button>
+          </div>}
+          {!message ? <form onSubmit={submit} className="mt-5 space-y-4">
             {!token ? <label className="block text-sm text-slate-300">Correo electrónico<input type="email" autoComplete="email" maxLength={150} required value={email} onChange={(event) => setEmail(event.target.value)} className={inputClass} placeholder="nombre@empresa.com" /></label> : <>
-              <label className="block text-sm text-slate-300">Nueva contraseña<input type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={password} onChange={(event) => setPassword(event.target.value)} className={inputClass} /></label>
-              <label className="block text-sm text-slate-300">Confirma la contraseña<input type="password" autoComplete="new-password" minLength={10} maxLength={128} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className={inputClass} /></label>
+              <label className="block text-sm text-slate-300">Nueva contraseña<input type={showPasswords ? 'text' : 'password'} autoComplete="new-password" minLength={10} maxLength={128} required value={password} onChange={(event) => setPassword(event.target.value)} className={inputClass} /></label>
+              <label className="block text-sm text-slate-300">Confirma la contraseña<input type={showPasswords ? 'text' : 'password'} autoComplete="new-password" minLength={10} maxLength={128} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className={inputClass} /></label>
+              <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={showPasswords} onChange={(event) => setShowPasswords(event.target.checked)} /> Mostrar contraseñas</label>
             </>}
             <button type="submit" disabled={busy} className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:from-blue-500 hover:to-indigo-500 disabled:opacity-60">{busy ? 'Procesando…' : token ? 'Actualizar contraseña' : 'Enviar enlace'}</button>
           </form> : null}
+          {token && <Link to="/recuperar" className="mt-4 inline-block text-sm font-medium text-indigo-300 hover:text-indigo-200">Solicitar un enlace nuevo</Link>}
         </GlassCard>
         <p className="mt-5 text-center text-sm text-slate-500"><Link to="/login" className="font-medium text-indigo-300 transition hover:text-indigo-200">Volver a iniciar sesión</Link></p>
       </motion.div>

@@ -73,6 +73,7 @@ def completar_reset():
     if not isinstance(datos, dict):
         raise ErrorApi(400, "El cuerpo debe ser un objeto JSON")
     restablecer_password(datos.get("token"), datos.get("password"))
+    session.clear()
     return jsonify(mensaje="Contraseña actualizada. Inicia sesión con tu nueva contraseña.")
 
 

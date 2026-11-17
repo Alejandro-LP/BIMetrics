@@ -151,7 +151,10 @@ PASSWORD_RESET_DEBUG=1 # En desarrollo local muestra el enlace en la UI; usar 0 
 # SMTP_PASSWORD=clave-smtp
 # SMTP_FROM=no-reply@example.com
 # SMTP_USE_TLS=1
+# SMTP_USE_SSL=1 para TLS directo, normalmente en el puerto 465.
 ```
+
+Para que el correo de recuperación abra la página correcta, configura `APP_BASE_URL` con la URL pública HTTPS del frontend. Completa `SMTP_HOST`, `SMTP_FROM` y las credenciales de tu proveedor si requiere autenticación. En desarrollo, `PASSWORD_RESET_DEBUG=1` muestra un enlace en la interfaz cuando no hay servidor SMTP configurado.
 
 ### 3. Preparar el primer administrador
 
@@ -234,7 +237,7 @@ Para evaluar o demostrar la plataforma, se recomienda seguir el siguiente guion 
 | **CU-03 · Exportación de documentos** | Descargar el presupuesto como **Excel (.xlsx)**, **Word (.docx)** y **PDF**. | Archivos con el detalle agrupado por capítulos y resumen AIU. Las descargas no contienen firma digital certificada. |
 | **CU-04 · Historial y duplicación** | Filtrar el historial por cliente y fechas; duplicar un presupuesto en la misma obra o crear otra obra a partir de él. | Historial filtrado y copia independiente con precios vigentes para la ciudad de destino. |
 | **CU-05 · Administración de catálogo** | Como administrador, crear/editar/eliminar partidas, archivar/reactivar insumos operativos y ajustar precios por ciudad. | Solo una cuenta administradora puede cambiar el catálogo y sus precios; archivar conserva los presupuestos históricos. |
-| **CU-06 · Colaboración y roles** | Generar un código de invitación para arquitectura, ingeniería o cliente y canjearlo desde la cuenta invitada. | Profesionales pueden colaborar en partidas; el cliente consulta el presupuesto en modo de solo lectura. |
+| **CU-06 · Colaboración y roles** | El propietario genera un código por persona. Puede elegir cualquier perfil o limitarlo a un rol. La persona invitada usa **Proyectos y presupuestos → Unirse con código**. | El código vence en siete días, concede acceso a esa obra y conserva el rol de la cuenta. Cliente consulta el presupuesto en modo de solo lectura. |
 | **Persistencia políglota** | Registrar un evento de actividad BIM vinculado a la obra y consultar `GET /api/dashboard/resumen`. | El dashboard devuelve una respuesta unificada que integra métricas transaccionales SQL y el historial documental NoSQL de MongoDB. |
 
 ### Prueba de endpoints protegidos por API
@@ -350,7 +353,7 @@ Todas las peticiones que mutan estado (`POST`, `PUT`, `PATCH`, `DELETE`) exigen 
 - `GET /api/proyectos`: Listado de proyectos accesibles al usuario autenticado.
 - `POST /api/proyectos`: Creación de una nueva obra (nombre, cliente, ciudad).
 - `GET /api/proyectos/{id}/presupuestos`: Historial de presupuestos y versiones de la obra.
-- `POST /api/proyectos/{id}/invitaciones`: Generación de código de invitación (validez 7 días) para colaboradores o clientes.
+- `POST /api/proyectos/{id}/invitaciones`: El propietario genera un código de un uso válido durante siete días. Con `{}` o `{"rol":"cualquiera"}` admite los cuatro perfiles existentes.
 - `POST /api/proyectos/invitaciones/aceptar`: Canje de código de invitación asociando al usuario al proyecto.
 - `DELETE /api/proyectos/{id}`: Eliminación de proyecto (restringido al propietario).
 
@@ -385,6 +388,7 @@ Todas las peticiones que mutan estado (`POST`, `PUT`, `PATCH`, `DELETE`) exigen 
 - `PUT /api/actividades-bim/{id}` / `DELETE /api/actividades-bim/{id}`: Modificación y eliminación de actividad propia.
 - `GET /api/actividades-bim/usuario/{id_usuario}`: Historial cronológico de eventos BIM del usuario.
 - `GET /api/dashboard/resumen`: Endpoint políglota unificado con métricas de obras, presupuestos y actividad reciente.
+- `GET /api/dashboard/administracion`: Estadísticas globales de cuentas por rol, obras, obras compartidas, presupuestos y actividad BIM por estado. Se accede desde **Administración** con una cuenta administradora.
 
 ---
 

@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, session
 
 from ..errors import ErrorApi
-from ..services.dashboard import obtener_resumen
+from ..services.dashboard import obtener_resumen, obtener_resumen_admin
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
 
@@ -15,3 +15,9 @@ def resumen():
     if not id_usuario:
         raise ErrorApi(401, "Inicia sesión para consultar el dashboard")
     return jsonify(obtener_resumen(id_usuario))
+
+
+@bp.get("/administracion")
+def administracion():
+    """Devuelve estadísticas globales a cuentas administradoras."""
+    return jsonify(obtener_resumen_admin(session["id_usuario"]))
